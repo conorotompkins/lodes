@@ -72,3 +72,8 @@ test <- allegheny_tracts %>%
   
 test
 
+#links
+http://www.robertmanduca.com/projects/jobs.html
+https://lehd.ces.census.gov/data/
+  https://lehd.ces.census.gov/data/lodes/LODES7/LODESTechDoc7.3.pdf
+https://walkerke.github.io/tidycensus/articles/basic-usage.html
