@@ -3,14 +3,15 @@ library(sf)
 library(tidycensus)
 library(tidygraph)
 library(ggraph)
-library(gganimate)
 
 Sys.getenv("CENSUS_API_KEY")
 options(tigris_use_cache = TRUE)
 
-theme_set(theme_bw())
-
-geo_crosswalk <- read_csv("data/pa_xwalk.csv.gz", col_types = cols(.default = "c"))
+df_intermediate <- read_csv("data/df_tracts_summarized.csv", col_types = cols(.default = "c")) %>% 
+  mutate(jobs = as.numeric(jobs)) %>% 
+  arrange(h_zcta) %>% 
+  na.omit() %>% 
+  filter(!(h_zcta == w_zcta))
 
 allegheny <- get_decennial(geography = "county",
                            variables = c(total_pop = "P001001"),
@@ -19,66 +20,15 @@ allegheny <- get_decennial(geography = "county",
                            geometry = TRUE,
                            output = "wide")
 
-allegheny_tracts <- get_decennial(geography = "tract",
-                                  variables = c(total_pop = "P001001"),
-                                  state = "PA",
-                                  county = "Allegheny County",
-                                  geometry = TRUE,
-                                  output = "wide")
+all_zips <- get_acs(geography = "zip code tabulation area",
+                    variables = c(total_pop = "B01003_001"),
+                    geometry = TRUE,
+                    output = "wide")
 
-df <- read_csv("data/pa_od_main_JT00_2015.csv.gz", col_types = cols(.default = "c"), 
-               #n_max = 500000
-) %>% 
-  mutate(S000 = as.numeric(S000),) %>% 
-  select(h_geocode, w_geocode, S000)
-
-df_tracts_summarized <- df %>% 
-  group_by(h_geocode, w_geocode) %>% 
-  summarize(jobs = sum(S000)) %>% 
-  ungroup() %>% 
-  arrange(desc(jobs))
-
-df_tracts_summarized <- df_tracts_summarized %>% 
-  left_join(geo_crosswalk %>% select(tabblk2010, trct), by = c("h_geocode" = "tabblk2010")) %>% 
-  rename(h_tract = trct) %>% 
-  left_join(geo_crosswalk %>% select(tabblk2010, trct), by = c("w_geocode" = "tabblk2010")) %>% 
-  rename(w_tract = trct)
-
-df_tracts_summarized <- df_tracts_summarized %>% 
-  group_by(h_tract, w_tract) %>% 
-  summarize(jobs = sum(jobs)) %>% 
-  ungroup()
-
-df_map_jobs <- allegheny_tracts %>% 
-  left_join(df_tracts_summarized %>% select(w_tract, jobs), by = c("GEOID" = "w_tract")) %>% 
-  group_by(GEOID) %>% 
-  summarize(jobs = sum(jobs))
-
-#df_map_jobs %>% 
-#  ggplot() +
-#  geom_sf(aes(fill = jobs), color = NA) +
-#  scale_fill_viridis_c()
-
-df_map_homes <- allegheny_tracts %>% 
-  left_join(df_tracts_summarized %>% select(h_tract, jobs), by = c("GEOID" = "h_tract")) %>% 
-  group_by(GEOID) %>% 
-  summarize(jobs = sum(jobs))
-
-#df_map_homes %>% 
-#  ggplot() +
-#  geom_sf(aes(fill = jobs), color = NA) +
-#  scale_fill_viridis_c()
-
-df_tracts_summarized <- df_tracts_summarized %>% 
-  semi_join(allegheny_tracts, by = c("h_tract" = "GEOID")) %>% 
-  semi_join(allegheny_tracts, by = c("w_tract" = "GEOID"))
-
-df_intermediate <- df_tracts_summarized %>% 
-  arrange(h_tract) %>% 
-  na.omit() %>% 
-  filter(!(h_tract == w_tract))
-
-df_intermediate
+allegheny_zcta <- st_intersection(allegheny, all_zips) %>% 
+  select(-c(GEOID, NAME)) %>% 
+  rename(GEOID = GEOID.1,
+         NAME = NAME.1)
 
 #df_intermediate %>% 
 #  as_tbl_graph() %>% 
@@ -93,26 +43,48 @@ df_intermediate
 #  scale_edge_width_continuous(range = c(.3, 2)) +
 #  scale_edge_alpha_continuous(range = c(.1, 1))
 
-g <- df_intermediate %>% 
-  as_tbl_graph(directed = TRUE)
-
-allegheny_tracts_centroids <- cbind(allegheny_tracts, st_coordinates(st_centroid(allegheny_tracts))) %>% 
+allegheny_zcta_centroids <- cbind(allegheny_zcta, st_coordinates(st_centroid(allegheny_zcta))) %>% 
   st_set_geometry(NULL) %>% 
   as_tibble() %>% 
   rename(x = X,
          y = Y) %>% 
   select(GEOID, x, y)
 
-allegheny_tracts_centroids <- allegheny_tracts_centroids %>% 
-  semi_join(df_tracts_summarized, by = c("GEOID" = "h_tract"))
+allegheny_zcta_centroids <- allegheny_zcta_centroids %>% 
+  semi_join(df_intermediate, by = c("GEOID" = "h_zcta")) %>% 
+  semi_join(df_intermediate, by = c("GEOID" = "w_zcta"))
 
-node_pos <- allegheny_tracts_centroids
+df_intermediate <- df_intermediate %>% 
+  semi_join(allegheny_zcta_centroids, by = c("h_zcta" = "GEOID")) %>% 
+  semi_join(allegheny_zcta_centroids, by = c("w_zcta" = "GEOID"))
+
+g <- df_intermediate %>% 
+  as_tbl_graph(directed = TRUE)
+
+#node_pos <- allegheny_zcta_centroids
+
+#node_pos %>% 
+#  count(GEOID, sort = TRUE)
 
 minimum_jobs <- 200
 
 g1 <- g %>% 
   activate(edges) %>% 
   filter(jobs > minimum_jobs)
+g1
+graph_nodes <- g1 %>% 
+  activate(nodes) %>% 
+  as_tibble() %>% 
+  distinct(name)
+graph_nodes
+
+node_pos <- allegheny_zcta_centroids
+  
+node_pos %>% 
+  anti_join(graph_nodes, by = c("GEOID" = "name"))
+
+graph_nodes %>% 
+  anti_join(node_pos, by = c("name" = "GEOID"))
 
 layout <- create_layout(g1, 'manual',
                         node.positions = node_pos)
@@ -120,10 +92,10 @@ layout <- create_layout(g1, 'manual',
 manual_layout <- create_layout(graph = g1,
                                layout = "manual", node.positions = node_pos)
 
-legend_title <- str_c("Where do people commute from/to for work? \n", "Minimum: ", minimum_jobs, " commuters")
+legend_title <- str_c("Minimum: ", minimum_jobs, " commuters")
 legend_title
 ggraph(manual_layout) +
-  geom_sf(data = allegheny_tracts) +
+  geom_sf(data = allegheny_zcta) +
   #geom_node_label(aes(label = name),repel = FALSE) +
   geom_node_point(alpha = 0) +
   geom_edge_fan(aes(edge_width = jobs, edge_alpha = jobs),
@@ -135,9 +107,10 @@ ggraph(manual_layout) +
   scale_edge_alpha_continuous(legend_title, range = c(.1, 1), guide = "none") +
   labs(x = NULL,
        y = NULL,
-       title = NULL,
+       title = "Where do people commute from/to for work?",
        subtitle = "Based on 2015 US Census LODES dataset",
-       caption = "@conor_tompkins")
+       caption = "@conor_tompkins") +
+  theme_graph()
 
 
 ##################################
