@@ -50,6 +50,11 @@ allegheny_zcta_centroids <- cbind(allegheny_zcta, st_coordinates(st_centroid(all
          y = Y) %>% 
   select(GEOID, x, y)
 
+allegheny_zcta %>% 
+  ggplot() +
+  geom_sf() +
+  geom_label(data = allegheny_zcta_centroids, aes(x, y, label = GEOID))
+
 allegheny_zcta_centroids <- allegheny_zcta_centroids %>% 
   semi_join(df_intermediate, by = c("GEOID" = "h_zcta")) %>% 
   semi_join(df_intermediate, by = c("GEOID" = "w_zcta"))
@@ -68,33 +73,35 @@ g <- df_intermediate %>%
 
 minimum_jobs <- 200
 
-g1 <- g %>% 
+g <- g %>% 
   activate(edges) %>% 
   filter(jobs > minimum_jobs)
-g1
-graph_nodes1 <- g1 %>% 
+
+graph_nodes <- g %>% 
   activate(nodes) %>% 
-  as_tibble() %>% 
-  distinct(name)
-graph_nodes1
+  as_tibble()
 
-node_pos1 <- allegheny_zcta_centroids
-  
-node_pos1 %>% 
-  anti_join(graph_nodes1, by = c("GEOID" = "name"))
+graph_nodes
 
-graph_nodes1 %>% 
-  anti_join(node_pos1, by = c("name" = "GEOID"))
+g %>% 
+  activate(edges) %>% 
+  arrange(desc(jobs))
 
-layout1 <- create_layout(g1, 'manual',
-                        node.positions = node_pos1)
+node_pos <- allegheny_zcta_centroids %>% 
+  mutate(GEOID = as.numeric(GEOID)) %>% 
+  arrange(GEOID) %>% 
+  mutate(GEOID = as.character(GEOID))
 
-manual_layout1 <- create_layout(graph = g1,
-                               layout = "manual", node.positions = node_pos1)
+layout <- create_layout(g, 'manual',
+                        node.positions = node_pos)
+
+manual_layout <- create_layout(graph = g,
+                               layout = "manual", node.positions = node_pos)
 
 legend_title <- str_c("Minimum: ", minimum_jobs, " commuters")
 legend_title
-ggraph(manual_layout1) +
+
+ggraph(manual_layout) +
   geom_sf(data = allegheny_zcta) +
   #geom_node_label(aes(label = name),repel = FALSE) +
   geom_node_point(alpha = 0) +
@@ -132,56 +139,3 @@ ggraph(manual_layout1) +
 #  filter(to != to_tract_index)
 #g
 
-g2 <- g
-
-g2 %>% 
-  activate(edges) %>% 
-  as_tibble() %>% 
-  arrange(desc(jobs)) %>% 
-  ggplot(aes(jobs)) +
-  geom_density()
-
-zcta_nodes <- g2 %>% 
-  activate(nodes) %>% 
-  as_tibble() %>% 
-  mutate(index = row_number())
-
-selected_node <- zcta_nodes %>% 
-  filter(name == "15108") %>%
-  select(index) %>% 
-  pull(index)
-selected_node
-
-zcta_edges <- g %>% 
-  activate(edges) %>% 
-  as_tibble()
-
-zcta_edges %>% 
-  filter(from == selected_node)
-
-g2 <- g2 %>% 
-  activate(edges) %>% 
-  filter(from == selected_node)
-
-node_pos2 <- allegheny_zcta_centroids #%>% 
-  #filter(GEOID != "42003020100")
-
-layout2 <- create_layout(g2, 'manual',
-                        node.positions = node_pos2)
-
-manual_layout2 <- create_layout(graph = g2,
-                               layout = "manual", node.positions = node_pos2)
-
-ggraph(manual_layout2) +
-  geom_sf(data = allegheny_zcta) +
-  #geom_node_label(aes(label = name),repel = FALSE) +
-  geom_node_point(alpha = 0) +
-  geom_edge_fan(aes(edge_width = jobs, edge_alpha = jobs),
-                arrow = arrow(length = unit(.5, 'lines')), 
-                start_cap = circle(.1, 'lines'),
-                end_cap = circle(.5, 'lines'),
-                color = "blue") +
-  scale_edge_width_continuous("Commuters", range = c(.1, 1.5)) +
-  scale_edge_alpha_continuous("Commuters", range = c(.1, 1), guide = "none") +
-  labs(x = NULL,
-       y = NULL)
