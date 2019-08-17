@@ -19,17 +19,19 @@ allegheny <- get_decennial(geography = "county",
                            geometry = TRUE,
                            output = "wide")
 
-allegheny_tracts <- get_decennial(geography = "tract",
-                                  variables = c(total_pop = "P001001"),
-                                  state = "PA",
-                                  county = "Allegheny County",
-                                  geometry = TRUE,
-                                  output = "wide")
+all_zips <- get_acs(geography = "zip code tabulation area",
+                    variables = c(total_pop = "B01003_001"),
+                    geometry = TRUE,
+                    output = "wide")
 
-allegheny_zcta <- st_read("data/shp/Allegheny_County_Zip_Code_Boundaries.shp") %>% 
-  rename(GEOID = ZIP) %>% 
-  mutate(GEOID = as.character(GEOID))
-glimpse(allegheny_zcta)
+allegheny_zcta <- st_intersection(allegheny, all_zips) %>% 
+  select(-c(GEOID, NAME)) %>% 
+  rename(GEOID = GEOID.1,
+         NAME = NAME.1)
+
+allegheny_zcta %>% 
+  ggplot() +
+  geom_sf()
 
 df <- read_csv("data/pa_od_main_JT00_2015.csv.gz", col_types = cols(.default = "c"), 
                #n_max = 500000
