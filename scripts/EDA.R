@@ -2,6 +2,9 @@ library(tidyverse)
 library(sf)
 library(tidycensus)
 
+Sys.getenv("CENSUS_API_KEY")
+options(tigris_use_cache = TRUE)
+
 theme_set(theme_bw())
 
 df <- read_csv("data/pa_od_main_JT00_2015.csv.gz", col_types = cols(.default = "c"), n_max = 100000) %>% 
@@ -29,6 +32,8 @@ df_tracts_summarized <- df %>%
   summarize(jobs = sum(S000)) %>% 
   arrange(desc(jobs))
 
+df_tracts_summarized
+
 allegheny_blocks <- get_decennial(geography = "block",
                               variables = c(total_pop = "P001001"),
                               state = "PA",
@@ -55,6 +60,7 @@ allegheny_pop_map_tracts <- allegheny_tracts %>%
   geom_sf(aes(fill = total_pop), color = NA) +
   scale_fill_viridis_c()
 
+allegheny_pop_map_blocks
 allegheny_pop_map_tracts
 
 allegheny_blocks_centroids <- st_centroid(allegheny_blocks)
@@ -67,13 +73,15 @@ allegheny_tracts_centroids %>%
 
 test <- allegheny_tracts %>% 
   rename(w_tract = GEOID) %>% 
-  left_join(df_tracts_summarized %>% select(w_tract, h_tract, jobs))# %>% 
-  #left_join(df_tracts_summarized %>% select(h_tract, jobs), by = c("GEOID" = "h_tract"))
+  left_join(df_tracts_summarized %>% select(w_tract, h_tract, jobs)) %>%
+  select(w_tract, h_tract, NAME, geometry, total_pop, jobs)
   
 test
+
+
 
 #links
 http://www.robertmanduca.com/projects/jobs.html
 https://lehd.ces.census.gov/data/
-  https://lehd.ces.census.gov/data/lodes/LODES7/LODESTechDoc7.3.pdf
+https://lehd.ces.census.gov/data/lodes/LODES7/LODESTechDoc7.3.pdf
 https://walkerke.github.io/tidycensus/articles/basic-usage.html
