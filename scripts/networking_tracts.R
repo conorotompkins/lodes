@@ -106,7 +106,7 @@ ggraph(manual_layout) +
 
 
 ##################################
-#to filter on nodes
+#to filter on edges
 
 selected_node <- manual_layout %>% 
   filter(name == "42003472400") %>% 
