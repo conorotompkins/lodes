@@ -62,7 +62,7 @@ g <- df_intermediate %>%
 #node_pos %>% 
 #  count(GEOID, sort = TRUE)
 
-minimum_jobs <- 200
+minimum_jobs <- 50
 
 g <- g %>% 
   activate(edges) %>% 
@@ -79,9 +79,6 @@ g %>%
   arrange(desc(jobs))
 
 node_pos <- allegheny_tracts_centroids
-
-layout <- create_layout(g, 'manual',
-                        node.positions = node_pos)
 
 manual_layout <- create_layout(graph = g,
                                layout = "manual", node.positions = node_pos)
@@ -110,20 +107,32 @@ ggraph(manual_layout) +
 
 ##################################
 #to filter on nodes
-#tract_nodes <- g %>% 
-#  activate(nodes) %>% 
-#  as_tibble() %>% 
-#  mutate(index = row_number())
 
-#to_tract <- "42003020100"
+selected_node <- manual_layout %>% 
+  filter(name == "42003472400") %>% 
+  pull(ggraph.orig_index)
 
-#to_tract_index <- tract_nodes %>% 
-#  filter(name == to_tract) %>% 
-#  select(index) %>% 
-#  pull()
+g_filtered <- g %>% 
+  activate(edges) %>% 
+  filter(from == selected_node)
 
-#g <- g %>% 
-#  activate(edges) %>% 
-#  filter(to != to_tract_index)
-#g
+manual_layout_filtered <- create_layout(graph = g_filtered,
+                               layout = "manual", node.positions = node_pos)
 
+ggraph(manual_layout_filtered) +
+  geom_sf(data = allegheny_tracts) +
+  #geom_node_label(aes(label = name),repel = FALSE) +
+  geom_node_point(alpha = 0) +
+  geom_edge_fan(aes(edge_width = jobs, edge_alpha = jobs),
+                arrow = arrow(length = unit(.5, 'lines')), 
+                start_cap = circle(.1, 'lines'),
+                end_cap = circle(.5, 'lines'),
+                color = "blue") +
+  scale_edge_width_continuous(legend_title, range = c(.1, 1.5)) +
+  scale_edge_alpha_continuous(legend_title, range = c(.1, 1), guide = "none") +
+  labs(x = NULL,
+       y = NULL,
+       title = "Where do people commute from/to for work?",
+       subtitle = "Based on 2015 US Census LODES dataset",
+       caption = "@conor_tompkins") +
+  theme_graph()
