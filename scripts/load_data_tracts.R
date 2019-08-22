@@ -3,7 +3,6 @@ library(sf)
 library(tidycensus)
 library(tidygraph)
 library(ggraph)
-library(gganimate)
 
 Sys.getenv("CENSUS_API_KEY")
 options(tigris_use_cache = TRUE)
@@ -26,7 +25,7 @@ allegheny_tracts %>%
 df <- read_csv("data/pa_od_main_JT00_2015.csv.gz", col_types = cols(.default = "c"), 
                #n_max = 500000
 ) %>% 
-  mutate(S000 = as.numeric(S000),) %>% 
+  mutate(S000 = as.numeric(S000)) %>% 
   select(h_geocode, w_geocode, S000)
 
 df_tracts_summarized <- df %>% 
