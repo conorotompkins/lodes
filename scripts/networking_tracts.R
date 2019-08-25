@@ -127,22 +127,23 @@ g_main %>%
 node_pos <- allegheny_tracts_centroids
 
 manual_layout <- create_layout(graph = g_main,
-                               layout = "manual", node.positions = node_pos)
+                               layout = "manual", 
+                               node.positions = node_pos)
 
 legend_title <- str_c("Minimum: ", minimum_jobs, " commuters")
 legend_title
 
-ggraph(manual_layout) +
+main_graph <- ggraph(manual_layout) +
   geom_sf(data = allegheny_tracts, aes(fill = commuters_out), size = .01) +
   geom_node_point(alpha = 0) +
   geom_edge_fan(aes(edge_width = commuters, edge_alpha = commuters),
                 arrow = arrow(length = unit(.5, 'lines')), 
                 start_cap = circle(.1, 'lines'),
-                end_cap = circle(.5, 'lines'),
+                end_cap = circle(.2, 'lines'),
                 color = "white",
                 spread = 1) +
   scale_edge_width_continuous(legend_title, range = c(.1, 1.5)) +
-  scale_edge_alpha_continuous(legend_title, range = c(.1, 1), guide = "none") +
+  scale_edge_alpha_continuous(legend_title, range = c(.5, 1), guide = "none") +
   scale_fill_viridis_c() +
   labs(x = NULL,
        y = NULL,
@@ -151,6 +152,7 @@ ggraph(manual_layout) +
        caption = "@conor_tompkins") +
   theme_graph()
 
+ggsave("output/images/main_graph.png", main_graph, device = "png",  width = 12, height = 12)
 ##################################
 #to filter on edges
 
