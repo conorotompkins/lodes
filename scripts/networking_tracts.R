@@ -136,7 +136,9 @@ legend_title
 main_graph <- ggraph(manual_layout) +
   geom_sf(data = allegheny_tracts, aes(fill = commuters_out), size = .01) +
   geom_node_point(alpha = 0) +
-  geom_edge_fan(aes(edge_width = commuters, edge_alpha = commuters),
+  geom_edge_fan(aes(edge_width = commuters, 
+                    #edge_alpha = commuters
+                    ),
                 arrow = arrow(length = unit(.5, 'lines')), 
                 start_cap = circle(.1, 'lines'),
                 end_cap = circle(.2, 'lines'),
@@ -150,7 +152,10 @@ main_graph <- ggraph(manual_layout) +
        title = "Where do people commute from/to for work?",
        subtitle = "Based on 2015 US Census LODES dataset",
        caption = "@conor_tompkins") +
-  theme_graph()
+  theme_graph() +
+  theme(legend.background = element_rect(fill = "light grey"),
+        legend.text = element_text(color = "black"),
+        legend.title = element_text(color = "black"))
 
 ggsave("output/images/main_graph.png", main_graph, device = "png",  width = 12, height = 12)
 ##################################
@@ -162,7 +167,11 @@ g_filtered <- g %>%
   activate(edges) %>% 
   filter(commuters > minimum_jobs)
 
-filter_tract <- "42003452000"
+filter_tract <- "42003473500"
+
+allegheny_tracts_highlight <- allegheny_tracts %>% 
+  semi_join(df_intermediate %>% 
+              filter(h_tract == filter_tract), by = c("GEOID" = "w_tract"))
 
 selected_node <- manual_layout %>% 
   filter(name == filter_tract) %>% 
@@ -178,20 +187,23 @@ manual_layout_filtered <- create_layout(graph = g_filtered,
 ggraph(manual_layout_filtered) +
   geom_sf(data = allegheny_tracts, aes(fill = commuters_out), size = .01) +
   geom_sf(data = allegheny_tracts %>%  filter(GEOID == filter_tract), linetype = 2, alpha = 0, size = 2) +
-  #geom_node_label(aes(label = name),repel = FALSE) +
-  geom_node_point(alpha = 0) +
-  geom_edge_fan(aes(edge_width = commuters, edge_alpha = commuters),
-                arrow = arrow(length = unit(.5, 'lines')), 
+  geom_sf(data = allegheny_tracts_highlight, color = "red", alpha = 0) +
+  geom_edge_fan(aes(edge_width = commuters, #edge_alpha = commuters
+                    ),
+                arrow = arrow(length = unit(.5, 'lines')),
                 start_cap = circle(.1, 'lines'),
-                end_cap = circle(.5, 'lines'),
+                end_cap = circle(.2, 'lines'),
                 color = "white",
                 spread = 1) +
   scale_edge_width_continuous(legend_title, range = c(.1, 1.5)) +
-  scale_edge_alpha_continuous(legend_title, range = c(.1, 1), guide = "none") +
+  scale_edge_alpha_continuous(legend_title, range = c(.5, 1), guide = "none") +
   scale_fill_viridis_c() +
   labs(x = NULL,
        y = NULL,
        title = "Where do people commute from/to for work?",
        subtitle = "Based on 2015 US Census LODES dataset",
        caption = "@conor_tompkins") +
-  theme_graph()
+  theme_graph() +
+  theme(legend.background = element_rect(fill = "light grey"),
+        legend.text = element_text(color = "black"),
+        legend.title = element_text(color = "black"))
