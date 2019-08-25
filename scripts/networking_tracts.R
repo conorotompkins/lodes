@@ -137,7 +137,7 @@ main_graph <- ggraph(manual_layout) +
   geom_sf(data = allegheny_tracts, aes(fill = commuters_out), size = .01) +
   geom_node_point(alpha = 0) +
   geom_edge_fan(aes(edge_width = commuters, 
-                    #edge_alpha = commuters
+                    edge_alpha = commuters
                     ),
                 arrow = arrow(length = unit(.5, 'lines')), 
                 start_cap = circle(.1, 'lines'),
@@ -145,7 +145,7 @@ main_graph <- ggraph(manual_layout) +
                 color = "white",
                 spread = 1) +
   scale_edge_width_continuous(legend_title, range = c(.1, 1.5)) +
-  scale_edge_alpha_continuous(legend_title, range = c(.5, 1), guide = "none") +
+  scale_edge_alpha_continuous(legend_title, range = c(.1, 1), guide = "none") +
   scale_fill_viridis_c() +
   labs(x = NULL,
        y = NULL,
