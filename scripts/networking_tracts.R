@@ -43,16 +43,64 @@ allegheny_tracts_centroids <- cbind(allegheny_tracts, st_coordinates(st_centroid
 allegheny_tracts %>% 
   ggplot() +
   geom_sf() +
-  geom_point(data = allegheny_tracts_centroids, aes(x, y))
-  #geom_label(data = allegheny_tracts_centroids, aes(x, y, label = GEOID))
+  geom_point(data = allegheny_tracts_centroids, aes(x, y), size = .2)
 
-allegheny_tracts_centroids <- allegheny_tracts_centroids %>% 
-  semi_join(df_intermediate, by = c("GEOID" = "h_tract")) %>% 
-  semi_join(df_intermediate, by = c("GEOID" = "w_tract"))
+#allegheny_tracts_centroids <- allegheny_tracts_centroids %>% 
+#  semi_join(df_intermediate, by = c("GEOID" = "h_tract")) %>% 
+#  semi_join(df_intermediate, by = c("GEOID" = "w_tract"))
 
-df_intermediate <- df_intermediate %>% 
-  semi_join(allegheny_tracts_centroids, by = c("h_tract" = "GEOID")) %>% 
-  semi_join(allegheny_tracts_centroids, by = c("w_tract" = "GEOID"))
+#df_intermediate <- df_intermediate %>% 
+#  semi_join(allegheny_tracts_centroids, by = c("h_tract" = "GEOID")) %>% 
+#  semi_join(allegheny_tracts_centroids, by = c("w_tract" = "GEOID"))
+
+#separating commutes to and from
+df_home_jobs <- df_intermediate %>% 
+  rename(tract = h_tract,
+         commuters_out = jobs) %>% 
+  select(-w_tract) %>% 
+  group_by(tract) %>% 
+  summarize(commuters_out = sum(commuters_out))
+
+df_home_jobs %>% 
+  count(tract, sort = TRUE)
+
+df_work_jobs <- df_intermediate %>% 
+  rename(tract = w_tract,
+         commuters_in = jobs) %>% 
+  select(-h_tract) %>% 
+  group_by(tract) %>% 
+  summarize(commuters_in = sum(commuters_in))
+
+df_home_jobs %>% 
+  count(tract, sort = TRUE)
+
+allegheny_tracts <- allegheny_tracts %>% 
+  left_join(df_home_jobs, by = c("GEOID" = "tract")) %>% 
+  left_join(df_work_jobs, by = c("GEOID" = "tract")) %>% 
+  replace_na(list(commuters_in = 0))
+
+allegheny_tracts %>% 
+  ggplot(aes(commuters_out, commuters_in, label = NAME)) +
+  geom_point() +
+  theme_bw()
+
+allegheny_tracts %>% 
+  ggplot() +
+  geom_sf(aes(fill = commuters_in), size = .05) +
+  scale_fill_viridis_c()
+
+allegheny_tracts %>% 
+  ggplot() +
+  geom_sf(aes(fill = commuters_out), size = .05) +
+  scale_fill_viridis_c()
+
+allegheny_tracts %>% 
+  mutate(diff = commuters_out - commuters_in) %>% 
+  ggplot() +
+  geom_sf(aes(fill = diff), size = .05) +
+  scale_fill_viridis_c("Commuters in minus commuters out", direction = -1)
+
+minimum_jobs <- 25
 
 g <- df_intermediate %>% 
   as_tbl_graph(directed = TRUE)
@@ -61,8 +109,6 @@ g <- df_intermediate %>%
 
 #node_pos %>% 
 #  count(GEOID, sort = TRUE)
-
-minimum_jobs <- 50
 
 g <- g %>% 
   activate(edges) %>% 
@@ -87,16 +133,17 @@ legend_title <- str_c("Minimum: ", minimum_jobs, " commuters")
 legend_title
 
 ggraph(manual_layout) +
-  geom_sf(data = allegheny_tracts) +
+  geom_sf(data = allegheny_tracts, aes(fill = commuters_out),  size = .05) +
   #geom_node_label(aes(label = name),repel = FALSE) +
   geom_node_point(alpha = 0) +
   geom_edge_fan(aes(edge_width = jobs, edge_alpha = jobs),
                 arrow = arrow(length = unit(.5, 'lines')), 
                 start_cap = circle(.1, 'lines'),
                 end_cap = circle(.5, 'lines'),
-                color = "blue") +
+                color = "white") +
   scale_edge_width_continuous(legend_title, range = c(.1, 1.5)) +
   scale_edge_alpha_continuous(legend_title, range = c(.1, 1), guide = "none") +
+  scale_fill_viridis_c() +
   labs(x = NULL,
        y = NULL,
        title = "Where do people commute from/to for work?",
@@ -108,8 +155,10 @@ ggraph(manual_layout) +
 ##################################
 #to filter on edges
 
+filter_tract <- "42003409000"
+
 selected_node <- manual_layout %>% 
-  filter(name == "42003472400") %>% 
+  filter(name == filter_tract) %>% 
   pull(ggraph.orig_index)
 
 g_filtered <- g %>% 
@@ -120,16 +169,18 @@ manual_layout_filtered <- create_layout(graph = g_filtered,
                                layout = "manual", node.positions = node_pos)
 
 ggraph(manual_layout_filtered) +
-  geom_sf(data = allegheny_tracts) +
+  geom_sf(data = allegheny_tracts, aes(fill = commuters_out), size = .05) +
+  geom_sf(data = allegheny_tracts %>%  filter(GEOID == filter_tract), color = "red", alpha = 0) +
   #geom_node_label(aes(label = name),repel = FALSE) +
   geom_node_point(alpha = 0) +
   geom_edge_fan(aes(edge_width = jobs, edge_alpha = jobs),
                 arrow = arrow(length = unit(.5, 'lines')), 
                 start_cap = circle(.1, 'lines'),
                 end_cap = circle(.5, 'lines'),
-                color = "blue") +
+                color = "white") +
   scale_edge_width_continuous(legend_title, range = c(.1, 1.5)) +
   scale_edge_alpha_continuous(legend_title, range = c(.1, 1), guide = "none") +
+  scale_fill_viridis_c() +
   labs(x = NULL,
        y = NULL,
        title = "Where do people commute from/to for work?",
