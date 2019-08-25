@@ -8,17 +8,17 @@ Sys.getenv("CENSUS_API_KEY")
 options(tigris_use_cache = TRUE)
 
 df_intermediate <- read_csv("data/df_tracts_summarized.csv", col_types = cols(.default = "c")) %>% 
-  mutate(jobs = as.numeric(jobs)) %>% 
+  mutate(commuters = as.numeric(commuters)) %>% 
   arrange(h_tract) %>% 
   na.omit() %>% 
   filter(!(h_tract == w_tract))
 
 allegheny_tracts <- get_decennial(geography = "tract",
-                           variables = c(total_pop = "P001001"),
-                           state = "PA",
-                           county = "Allegheny County",
-                           geometry = TRUE,
-                           output = "wide")
+                                  variables = c(total_pop = "P001001"),
+                                  state = "PA",
+                                  county = "Allegheny County",
+                                  geometry = TRUE,
+                                  output = "wide")
 
 #df_intermediate %>% 
 #  as_tbl_graph() %>% 
@@ -54,29 +54,29 @@ allegheny_tracts %>%
 #  semi_join(allegheny_tracts_centroids, by = c("w_tract" = "GEOID"))
 
 #separating commutes to and from
-df_home_jobs <- df_intermediate %>% 
+df_home <- df_intermediate %>% 
   rename(tract = h_tract,
-         commuters_out = jobs) %>% 
+         commuters_out = commuters) %>% 
   select(-w_tract) %>% 
   group_by(tract) %>% 
   summarize(commuters_out = sum(commuters_out))
 
-df_home_jobs %>% 
+df_home %>% 
   count(tract, sort = TRUE)
 
-df_work_jobs <- df_intermediate %>% 
+df_work <- df_intermediate %>% 
   rename(tract = w_tract,
-         commuters_in = jobs) %>% 
+         commuters_in = commuters) %>% 
   select(-h_tract) %>% 
   group_by(tract) %>% 
   summarize(commuters_in = sum(commuters_in))
 
-df_home_jobs %>% 
+df_home %>% 
   count(tract, sort = TRUE)
 
 allegheny_tracts <- allegheny_tracts %>% 
-  left_join(df_home_jobs, by = c("GEOID" = "tract")) %>% 
-  left_join(df_work_jobs, by = c("GEOID" = "tract")) %>% 
+  left_join(df_home, by = c("GEOID" = "tract")) %>% 
+  left_join(df_work, by = c("GEOID" = "tract")) %>% 
   replace_na(list(commuters_in = 0))
 
 allegheny_tracts %>% 
@@ -95,52 +95,52 @@ allegheny_tracts %>%
   scale_fill_viridis_c()
 
 allegheny_tracts %>% 
-  mutate(diff = commuters_out - commuters_in) %>% 
+  ggplot(aes(commuters_out, total_pop)) +
+  geom_point() +
+  theme_bw()
+
+allegheny_tracts %>% 
+  mutate(diff = commuters_in - commuters_out) %>% 
   ggplot() +
   geom_sf(aes(fill = diff), size = .05) +
-  scale_fill_viridis_c("Commuters in minus commuters out", direction = -1)
+  scale_fill_viridis_c("Commuters in minus commuters out", direction = 1)
 
-minimum_jobs <- 25
+minimum_jobs <- 100
 
 g <- df_intermediate %>% 
   as_tbl_graph(directed = TRUE)
 
-#node_pos <- allegheny_zcta_centroids
-
-#node_pos %>% 
-#  count(GEOID, sort = TRUE)
-
-g <- g %>% 
+g_main <- g %>% 
   activate(edges) %>% 
-  filter(jobs > minimum_jobs)
+  filter(commuters > minimum_jobs)
 
-graph_nodes <- g %>% 
+graph_nodes <- g_main %>% 
   activate(nodes) %>% 
   as_tibble()
 
 graph_nodes
 
-g %>% 
+g_main %>% 
   activate(edges) %>% 
-  arrange(desc(jobs))
+  arrange(desc(commuters))
 
 node_pos <- allegheny_tracts_centroids
 
-manual_layout <- create_layout(graph = g,
+manual_layout <- create_layout(graph = g_main,
                                layout = "manual", node.positions = node_pos)
 
 legend_title <- str_c("Minimum: ", minimum_jobs, " commuters")
 legend_title
 
 ggraph(manual_layout) +
-  geom_sf(data = allegheny_tracts, aes(fill = commuters_out),  size = .05) +
-  #geom_node_label(aes(label = name),repel = FALSE) +
+  geom_sf(data = allegheny_tracts, aes(fill = commuters_out), size = .01) +
   geom_node_point(alpha = 0) +
-  geom_edge_fan(aes(edge_width = jobs, edge_alpha = jobs),
+  geom_edge_fan(aes(edge_width = commuters, edge_alpha = commuters),
                 arrow = arrow(length = unit(.5, 'lines')), 
                 start_cap = circle(.1, 'lines'),
                 end_cap = circle(.5, 'lines'),
-                color = "white") +
+                color = "white",
+                spread = 1) +
   scale_edge_width_continuous(legend_title, range = c(.1, 1.5)) +
   scale_edge_alpha_continuous(legend_title, range = c(.1, 1), guide = "none") +
   scale_fill_viridis_c() +
@@ -151,33 +151,39 @@ ggraph(manual_layout) +
        caption = "@conor_tompkins") +
   theme_graph()
 
-
 ##################################
 #to filter on edges
 
-filter_tract <- "42003409000"
+minimum_jobs <- 25
+
+g_filtered <- g %>% 
+  activate(edges) %>% 
+  filter(commuters > minimum_jobs)
+
+filter_tract <- "42003452000"
 
 selected_node <- manual_layout %>% 
   filter(name == filter_tract) %>% 
   pull(ggraph.orig_index)
 
-g_filtered <- g %>% 
+g_filtered <- g_filtered %>% 
   activate(edges) %>% 
   filter(from == selected_node)
 
 manual_layout_filtered <- create_layout(graph = g_filtered,
-                               layout = "manual", node.positions = node_pos)
+                                        layout = "manual", node.positions = node_pos)
 
 ggraph(manual_layout_filtered) +
-  geom_sf(data = allegheny_tracts, aes(fill = commuters_out), size = .05) +
-  geom_sf(data = allegheny_tracts %>%  filter(GEOID == filter_tract), color = "red", alpha = 0) +
+  geom_sf(data = allegheny_tracts, aes(fill = commuters_out), size = .01) +
+  geom_sf(data = allegheny_tracts %>%  filter(GEOID == filter_tract), linetype = 2, alpha = 0, size = 2) +
   #geom_node_label(aes(label = name),repel = FALSE) +
   geom_node_point(alpha = 0) +
-  geom_edge_fan(aes(edge_width = jobs, edge_alpha = jobs),
+  geom_edge_fan(aes(edge_width = commuters, edge_alpha = commuters),
                 arrow = arrow(length = unit(.5, 'lines')), 
                 start_cap = circle(.1, 'lines'),
                 end_cap = circle(.5, 'lines'),
-                color = "white") +
+                color = "white",
+                spread = 1) +
   scale_edge_width_continuous(legend_title, range = c(.1, 1.5)) +
   scale_edge_alpha_continuous(legend_title, range = c(.1, 1), guide = "none") +
   scale_fill_viridis_c() +
