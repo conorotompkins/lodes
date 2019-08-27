@@ -7,7 +7,7 @@ library(ggraph)
 Sys.getenv("CENSUS_API_KEY")
 options(tigris_use_cache = TRUE)
 
-df_intermediate <- read_csv("data/df_tracts_summarized.csv", col_types = cols(.default = "c")) %>% 
+df_intermediate <- read_csv("data/df_tracts_summarized_allegheny.csv", col_types = cols(.default = "c")) %>% 
   mutate(commuters = as.numeric(commuters)) %>% 
   arrange(h_tract) %>% 
   na.omit() %>% 
