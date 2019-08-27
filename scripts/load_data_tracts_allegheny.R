@@ -49,4 +49,4 @@ df_tracts_summarized <- df_tracts_summarized %>%
   semi_join(allegheny_tracts, by = c("h_tract" = "GEOID")) %>% 
   semi_join(allegheny_tracts, by = c("w_tract" = "GEOID"))
 
-write_csv(df_tracts_summarized, "data/df_tracts_summarized.csv")
+write_csv(df_tracts_summarized, "data/df_tracts_summarized_allegheny.csv")
