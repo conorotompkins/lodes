@@ -13,4 +13,11 @@ allegheny_tracts <- get_decennial(geography = "tract",
                                   geometry = TRUE,
                                   output = "wide")
 
+pa_tracts <- get_decennial(geography = "tract",
+                           variables = c(total_pop = "P001001"),
+                           state = "PA",
+                           geometry = TRUE,
+                           output = "wide")
+
 mapview(allegheny_tracts)
+mapview(pa_tracts)
