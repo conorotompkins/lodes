@@ -157,6 +157,9 @@ main_graph <- ggraph(manual_layout) +
         legend.text = element_text(color = "black"),
         legend.title = element_text(color = "black"))
 
+#main_graph %>% 
+#  plotly::ggplotly()
+
 ggsave("output/images/main_graph.png", main_graph, device = "png",  width = 12, height = 12)
 ##################################
 #to filter on edges
