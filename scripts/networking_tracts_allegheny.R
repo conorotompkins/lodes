@@ -20,19 +20,6 @@ allegheny_tracts <- get_decennial(geography = "tract",
                                   geometry = TRUE,
                                   output = "wide")
 
-#df_intermediate %>% 
-#  as_tbl_graph() %>% 
-#  activate(edges) %>% 
-#  filter(jobs > 100) %>% 
-#  ggraph(layout = "kk") +
-#  geom_node_point(size = .3) +
-#  geom_edge_fan(aes(edge_width = jobs, edge_alpha = jobs),
-#                arrow = arrow(length = unit(4, 'mm')), 
-#                start_cap = circle(3, 'mm'),
-#                end_cap = circle(3, 'mm')) +
-#  scale_edge_width_continuous(range = c(.3, 2)) +
-#  scale_edge_alpha_continuous(range = c(.1, 1))
-
 allegheny_tracts_centroids <- cbind(allegheny_tracts, st_coordinates(st_centroid(allegheny_tracts))) %>% 
   st_set_geometry(NULL) %>% 
   as_tibble() %>% 
@@ -45,14 +32,6 @@ allegheny_tracts %>%
   geom_sf() +
   geom_point(data = allegheny_tracts_centroids, aes(x, y), size = .2)
 
-#allegheny_tracts_centroids <- allegheny_tracts_centroids %>% 
-#  semi_join(df_intermediate, by = c("GEOID" = "h_tract")) %>% 
-#  semi_join(df_intermediate, by = c("GEOID" = "w_tract"))
-
-#df_intermediate <- df_intermediate %>% 
-#  semi_join(allegheny_tracts_centroids, by = c("h_tract" = "GEOID")) %>% 
-#  semi_join(allegheny_tracts_centroids, by = c("w_tract" = "GEOID"))
-
 #separating commutes to and from
 df_home <- df_intermediate %>% 
   rename(tract = h_tract,
@@ -62,7 +41,8 @@ df_home <- df_intermediate %>%
   summarize(commuters_out = sum(commuters_out))
 
 df_home %>% 
-  count(tract, sort = TRUE)
+  count(tract, sort = TRUE) %>% 
+  filter(n > 1)
 
 df_work <- df_intermediate %>% 
   rename(tract = w_tract,
@@ -72,7 +52,8 @@ df_work <- df_intermediate %>%
   summarize(commuters_in = sum(commuters_in))
 
 df_home %>% 
-  count(tract, sort = TRUE)
+  count(tract, sort = TRUE) %>% 
+  filter(n > 1)
 
 allegheny_tracts <- allegheny_tracts %>% 
   left_join(df_home, by = c("GEOID" = "tract")) %>% 
@@ -105,14 +86,18 @@ allegheny_tracts %>%
   geom_sf(aes(fill = diff), size = .05) +
   scale_fill_viridis_c("Commuters in minus commuters out", direction = 1)
 
-minimum_jobs <- 100
+minimum_commuters <- 100
 
 g <- df_intermediate %>% 
   as_tbl_graph(directed = TRUE)
 
+g
+
 g_main <- g %>% 
   activate(edges) %>% 
-  filter(commuters > minimum_jobs)
+  filter(commuters > minimum_commuters)
+
+g_main
 
 graph_nodes <- g_main %>% 
   activate(nodes) %>% 
@@ -127,86 +112,229 @@ g_main %>%
 node_pos <- allegheny_tracts_centroids
 
 manual_layout <- create_layout(graph = g_main,
-                               layout = "manual", 
-                               node.positions = node_pos)
+                               layout = node_pos)
 
-legend_title <- str_c("Minimum: ", minimum_jobs, " commuters")
+manual_layout %>% 
+  as_tibble()
+
+legend_title <- str_c("Minimum: ", minimum_commuters, " commuters")
 legend_title
 
 main_graph <- ggraph(manual_layout) +
-  geom_sf(data = allegheny_tracts, aes(fill = commuters_out), size = .01) +
+  geom_sf(data = allegheny_tracts, size = .1, fill = NA, color = "grey") +
   geom_node_point(alpha = 0) +
   geom_edge_fan(aes(edge_width = commuters, 
-                    edge_alpha = commuters
-                    ),
+                    edge_alpha = commuters),
                 arrow = arrow(length = unit(.5, 'lines')), 
                 start_cap = circle(.1, 'lines'),
                 end_cap = circle(.2, 'lines'),
                 color = "white",
-                spread = 1) +
+                strength = .5) +
   scale_edge_width_continuous(legend_title, range = c(.1, 1.5)) +
-  scale_edge_alpha_continuous(legend_title, range = c(.1, 1), guide = "none") +
+  scale_edge_alpha_continuous(legend_title, range = c(.1, .8), 
+                              #guide = "none"
+                              ) +
   scale_fill_viridis_c() +
   labs(x = NULL,
        y = NULL,
        title = "Where do people commute from/to for work?",
-       subtitle = "Based on 2015 US Census LODES dataset",
-       caption = "@conor_tompkins") +
+       subtitle = "Not including with-tract commuters",
+       caption = "Based on 2015 US Census LODES dataset | @conor_tompkins") +
   theme_graph() +
   theme(legend.background = element_rect(fill = "light grey"),
         legend.text = element_text(color = "black"),
-        legend.title = element_text(color = "black"))
-
-#main_graph %>% 
-#  plotly::ggplotly()
+        legend.title = element_text(color = "black"),
+        panel.background = element_rect(fill = "black"))
+main_graph
 
 ggsave("output/images/main_graph.png", main_graph, device = "png",  width = 12, height = 12)
-##################################
-#to filter on edges
+###########
+#facet on top 5 nodes
+minimum_commuters <- 5
 
-minimum_jobs <- 25
+top_work_tracts <- df_home %>% 
+  arrange(desc(commuters_out)) %>% 
+  top_n(5, commuters_out) %>% 
+  select(tract)
+
+g_facet <- g %>% 
+  activate(edges) %>% 
+  left_join(manual_layout %>% select(.ggraph.index, name), by = c("from" = ".ggraph.index")) %>% 
+  semi_join(top_work_tracts, by = c("name" = "tract")) %>% 
+  filter(commuters > minimum_commuters)
+
+g_facet %>% 
+  arrange(desc(commuters)) %>% 
+  activate(edges)
+
+manual_layout_faceted <- create_layout(graph = g_facet,
+                                        layout = node_pos)
+
+legend_title <- str_c("Minimum: ", minimum_commuters, " commuters")
+legend_title
+
+manual_layout_faceted
+
+ggraph(manual_layout_faceted) +
+  geom_sf(data = allegheny_tracts, size = .1, fill = NA, color = "light grey") +
+  geom_edge_fan(aes(edge_width = commuters, edge_alpha = commuters),
+            arrow = arrow(length = unit(.5, 'lines')),
+            start_cap = circle(.1, 'lines'),
+            end_cap = circle(.2, 'lines'),
+            color = "red",
+            strength = .5) +
+  facet_edges(~name) +
+  scale_edge_width_continuous(legend_title, range = c(.1, 1.5)) +
+  scale_edge_alpha_continuous(legend_title, range = c(.1, 1), 
+                              #guide = "none"
+  ) +
+  scale_fill_viridis_c() +
+  labs(x = NULL,
+       y = NULL,
+       title = "Where do people commute from/to for work?",
+       #subtitle = str_c("From tract", filter_tract, sep = " "),
+       caption = "Based on 2015 US Census LODES dataset | @conor_tompkins") +
+  theme_graph() +
+  theme(legend.background = element_rect(fill = "light grey"),
+        legend.text = element_text(color = "black"),
+        legend.title = element_text(color = "black"),
+        panel.background = element_rect(fill = "black"))
+
+##################################
+#exclude downtown tract
+minimum_commuters <- 100
 
 g_filtered <- g %>% 
   activate(edges) %>% 
-  filter(commuters > minimum_jobs)
+  filter(commuters > minimum_commuters)
+
+g_filtered
+
+filter_tract <- "42003020100"
+
+manual_layout %>% 
+  as_tibble()
+
+selected_node <- manual_layout %>% 
+  filter(name != filter_tract) %>% 
+  pull(.ggraph.orig_index)
+
+g_filtered <- g_filtered %>% 
+  activate(edges) %>% 
+  filter(to %in% selected_node)
+
+g_filtered
+
+manual_layout_filtered <- create_layout(graph = g_filtered,
+                                        layout = node_pos)
+
+legend_title <- str_c("Minimum: ", minimum_commuters, " commuters")
+legend_title
+
+ggraph(manual_layout_filtered) +
+  geom_sf(data = allegheny_tracts, size = .1, fill = NA, color = "light grey") +
+  #geom_sf(data = allegheny_tracts %>%  filter(GEOID == filter_tract), 
+  #        fill = "grey") +
+  #geom_sf(data = allegheny_tracts_highlight, color = "red", alpha = 0) +
+  geom_edge_fan(aes(edge_width = commuters, edge_alpha = commuters
+            ),
+            arrow = arrow(length = unit(.5, 'lines')),
+            start_cap = circle(.1, 'lines'),
+            end_cap = circle(.2, 'lines'),
+            color = "white",
+            strength = .5) +
+  scale_edge_width_continuous(legend_title, range = c(.1, 1.5)) +
+  scale_edge_alpha_continuous(legend_title, range = c(.1, .8), 
+                              #guide = "none"
+  ) +
+  scale_fill_viridis_c() +
+  labs(x = NULL,
+       y = NULL,
+       title = "Where do people commute from/to for work?",
+       subtitle = "Exluding Downtown tract",
+       caption = "Based on 2015 US Census LODES dataset | @conor_tompkins") +
+  theme_graph() +
+  theme(legend.background = element_rect(fill = "light grey"),
+        legend.text = element_text(color = "black"),
+        legend.title = element_text(color = "black"),
+        panel.background = element_rect(fill = "black"))
+
+##################################
+#to filter on edges
+
+minimum_commuters <- 15
+
+g_filtered <- g %>% 
+  activate(edges) %>% 
+  filter(commuters > minimum_commuters)
+
+g_filtered
 
 filter_tract <- "42003473500"
 
 allegheny_tracts_highlight <- allegheny_tracts %>% 
   semi_join(df_intermediate %>% 
-              filter(h_tract == filter_tract), by = c("GEOID" = "w_tract"))
+              filter(h_tract == filter_tract), by = c("GEOID" = "w_tract")) %>% 
+  filter(commuters_in > minimum_commuters)
+
+allegheny_tracts_highlight
+
+manual_layout
 
 selected_node <- manual_layout %>% 
   filter(name == filter_tract) %>% 
-  pull(ggraph.orig_index)
+  pull(.ggraph.orig_index)
 
 g_filtered <- g_filtered %>% 
   activate(edges) %>% 
   filter(from == selected_node)
 
+g_filtered
+
 manual_layout_filtered <- create_layout(graph = g_filtered,
-                                        layout = "manual", node.positions = node_pos)
+                                        layout = node_pos)
+
+zoom_x <- manual_layout_filtered %>% 
+  filter(.ggraph.orig_index == selected_node) %>% 
+  pull(x)
+
+zoom_y <- manual_layout_filtered %>% 
+  filter(.ggraph.orig_index == selected_node) %>% 
+  pull(y)
+
+zoom_magnitude <- .25
+
+legend_title <- str_c("Minimum: ", minimum_commuters, " commuters")
+legend_title
+
+manual_layout
 
 ggraph(manual_layout_filtered) +
-  geom_sf(data = allegheny_tracts, aes(fill = commuters_out), size = .01) +
-  geom_sf(data = allegheny_tracts %>%  filter(GEOID == filter_tract), linetype = 2, alpha = 0, size = 2) +
-  geom_sf(data = allegheny_tracts_highlight, color = "red", alpha = 0) +
+  geom_sf(data = allegheny_tracts, size = .1, fill = NA) +
+  geom_sf(data = allegheny_tracts %>%  filter(GEOID == filter_tract), 
+          fill = "grey") +
+  #geom_sf(data = allegheny_tracts_highlight, color = "red", alpha = 0) +
   geom_edge_fan(aes(edge_width = commuters, #edge_alpha = commuters
                     ),
                 arrow = arrow(length = unit(.5, 'lines')),
                 start_cap = circle(.1, 'lines'),
                 end_cap = circle(.2, 'lines'),
-                color = "white",
-                spread = 1) +
+                color = "red",
+                strength = .5) +
+  coord_sf(xlim = c(zoom_x + zoom_magnitude, zoom_x -zoom_magnitude), 
+           ylim = c(zoom_y + zoom_magnitude, zoom_y - zoom_magnitude)) +
   scale_edge_width_continuous(legend_title, range = c(.1, 1.5)) +
-  scale_edge_alpha_continuous(legend_title, range = c(.5, 1), guide = "none") +
+  scale_edge_alpha_continuous(legend_title, range = c(.1, .8), 
+                              #guide = "none"
+  ) +
   scale_fill_viridis_c() +
   labs(x = NULL,
        y = NULL,
        title = "Where do people commute from/to for work?",
-       subtitle = "Based on 2015 US Census LODES dataset",
-       caption = "@conor_tompkins") +
+       subtitle = str_c("From tract", filter_tract, sep = " "),
+       caption = "Based on 2015 US Census LODES dataset | @conor_tompkins") +
   theme_graph() +
   theme(legend.background = element_rect(fill = "light grey"),
         legend.text = element_text(color = "black"),
-        legend.title = element_text(color = "black"))
+        legend.title = element_text(color = "black"),
+        panel.background = element_rect(fill = "black"))

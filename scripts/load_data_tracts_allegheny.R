@@ -43,7 +43,8 @@ df_tracts_summarized <- df_tracts_summarized %>%
 df_tracts_summarized <- df_tracts_summarized %>% 
   group_by(h_tract, w_tract) %>% 
   summarize(commuters = sum(commuters)) %>% 
-  ungroup()
+  ungroup() %>% 
+  arrange(desc(commuters))
 
 df_tracts_summarized <- df_tracts_summarized %>% 
   semi_join(allegheny_tracts, by = c("h_tract" = "GEOID")) %>% 
