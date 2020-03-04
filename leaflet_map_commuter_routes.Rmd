@@ -1,0 +1,100 @@
+---
+title: "leaflet_map_commuter_routes"
+author: "Conor Tompkins"
+date: "3/2/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      message = FALSE,
+                      warning = FALSE)
+```
+
+```{r}
+library(tidyverse)
+library(sf)
+library(tidycensus)
+library(leaflet)
+```
+
+
+```{r}
+Sys.getenv("CENSUS_API_KEY")
+options(tigris_use_cache = TRUE)
+```
+
+
+```{r}
+df_intermediate <- read_csv("data/df_tracts_summarized.csv", col_types = cols(.default = "c")) %>% 
+  mutate(jobs = as.numeric(jobs)) %>% 
+  arrange(h_tract) %>% 
+  na.omit() %>% 
+  filter(!(h_tract == w_tract))
+```
+
+
+```{r}
+allegheny_tracts <- get_decennial(geography = "tract",
+                           variables = c(total_pop = "P001001"),
+                           state = "PA",
+                           county = "Allegheny County",
+                           geometry = TRUE,
+                           output = "wide") %>% 
+  #st_transform(3488) %>% 
+  mutate(name = case_when(GEOID == "42003020100" ~ "Downtown",
+                          GEOID == "42003070300" ~ "Shadyside"))
+
+allegheny_border <- allegheny_tracts %>% 
+  summarize()
+
+allegheny_tracts_centroids <- cbind(allegheny_tracts,
+                                    st_coordinates(st_centroid(allegheny_tracts))) %>%
+  st_drop_geometry()
+```
+
+
+```{r}
+df_connections <- df_intermediate %>% 
+  arrange(desc(jobs)) %>% 
+  mutate(line_id = row_number()) %>% 
+  select(line_id, everything()) %>% 
+  slice(1:10) %>% 
+  pivot_longer(cols = contains("_tract"), names_to = "tract_type", values_to = "GEOID") %>% 
+  select(line_id, GEOID, tract_type, jobs) %>% 
+  right_join(allegheny_tracts_centroids, by = c("GEOID" = "GEOID")) %>% 
+  filter(!is.na(jobs)) %>% 
+  arrange(line_id)
+
+df_connections <- df_connections %>% 
+  st_as_sf(coords = c("X", "Y")) %>% 
+  group_by(line_id, jobs) %>%
+  summarise() %>% # union points into lines using our created lineid
+  st_cast("LINESTRING")
+```
+
+
+```{r}
+df_connections %>% 
+  leaflet() %>% 
+  addTiles() %>% 
+  addPolygons(data = allegheny_border,
+              fillOpacity = 0) %>% 
+  addPolylines()
+```
+
+
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
