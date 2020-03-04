@@ -30,9 +30,9 @@ df <- read_csv("data/pa_od_main_JT00_2015.csv.gz", col_types = cols(.default = "
 
 df_tracts_summarized <- df %>% 
   group_by(h_geocode, w_geocode) %>% 
-  summarize(jobs = sum(S000)) %>% 
+  summarize(commuters = sum(S000)) %>% 
   ungroup() %>% 
-  arrange(desc(jobs))
+  arrange(desc(commuters))
 
 df_tracts_summarized <- df_tracts_summarized %>% 
   left_join(geo_crosswalk %>% select(tabblk2010, trct), by = c("h_geocode" = "tabblk2010")) %>% 
@@ -42,11 +42,12 @@ df_tracts_summarized <- df_tracts_summarized %>%
 
 df_tracts_summarized <- df_tracts_summarized %>% 
   group_by(h_tract, w_tract) %>% 
-  summarize(jobs = sum(jobs)) %>% 
-  ungroup()
+  summarize(commuters = sum(commuters)) %>% 
+  ungroup() %>% 
+  arrange(desc(commuters))
 
 df_tracts_summarized <- df_tracts_summarized %>% 
   semi_join(allegheny_tracts, by = c("h_tract" = "GEOID")) %>% 
   semi_join(allegheny_tracts, by = c("w_tract" = "GEOID"))
 
-write_csv(df_tracts_summarized, "data/df_tracts_summarized.csv")
+write_csv(df_tracts_summarized, "data/df_tracts_summarized_allegheny.csv")
