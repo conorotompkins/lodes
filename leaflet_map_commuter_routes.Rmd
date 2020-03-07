@@ -26,7 +26,8 @@ options(tigris_use_cache = TRUE)
 
 
 ```{r}
-df_intermediate <- read_csv("data/df_tracts_summarized.csv", col_types = cols(.default = "c")) %>% 
+df_intermediate <- read_csv("data/summarized_lodes_tracts.csv", col_types = cols(.default = "c")) %>% 
+  rename(jobs = commuters) %>% 
   mutate(jobs = as.numeric(jobs)) %>% 
   arrange(h_tract) %>% 
   na.omit() %>% 
@@ -59,14 +60,22 @@ df_connections <- df_intermediate %>%
   arrange(desc(jobs)) %>% 
   mutate(line_id = row_number()) %>% 
   select(line_id, everything()) %>% 
-  slice(1:10) %>% 
+  slice(1:5) %>% 
   pivot_longer(cols = contains("_tract"), names_to = "tract_type", values_to = "GEOID") %>% 
   select(line_id, GEOID, tract_type, jobs) %>% 
   right_join(allegheny_tracts_centroids, by = c("GEOID" = "GEOID")) %>% 
   filter(!is.na(jobs)) %>% 
   arrange(line_id)
 
-df_connections <- df_connections %>% 
+
+df_tracts <- df_connections %>% 
+  #st_drop_geometry() %>% 
+  distinct(GEOID)
+  
+df_tracts <- allegheny_tracts %>% 
+  semi_join(df_tracts)
+
+df_lines <- df_connections %>% 
   st_as_sf(coords = c("X", "Y")) %>% 
   group_by(line_id, jobs) %>%
   summarise() %>% # union points into lines using our created lineid
@@ -75,12 +84,24 @@ df_connections <- df_connections %>%
 
 
 ```{r}
-df_connections %>% 
-  leaflet() %>% 
+transit_lines_palette <- colorFactor(palette = "Set1", domain = df_lines$line_id)
+tract_palette <- colorFactor(palette = "Set1", domain = df_tracts$GEOID)
+
+leaflet() %>% 
   addTiles() %>% 
   addPolygons(data = allegheny_border,
-              fillOpacity = 0) %>% 
-  addPolylines()
+              color = "#444444",
+              stroke = TRUE,
+              fillOpacity = 0,
+              opacity = 1,
+              weight = 2,
+              group = "Census tracts") %>% 
+  addPolygons(data = df_tracts,
+              fillColor = ~tract_palette(GEOID),
+              fillOpacity = .3,
+              color = ~tract_palette(GEOID)) %>% 
+  addPolylines(data = df_lines,
+               color = ~transit_lines_palette(line_id))
 ```
 
 
