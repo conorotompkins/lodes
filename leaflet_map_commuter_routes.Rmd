@@ -68,12 +68,11 @@ df_connections <- df_intermediate %>%
   arrange(line_id)
 
 
-df_tracts <- df_connections %>% 
-  #st_drop_geometry() %>% 
-  distinct(GEOID)
+df_tract_pairs <- df_connections %>% 
+  select(line_id, GEOID)
   
 df_tracts <- allegheny_tracts %>% 
-  semi_join(df_tracts)
+  semi_join(df_tract_pairs %>% distinct(GEOID))
 
 df_lines <- df_connections %>% 
   st_as_sf(coords = c("X", "Y")) %>% 
@@ -85,7 +84,7 @@ df_lines <- df_connections %>%
 
 ```{r}
 transit_lines_palette <- colorFactor(palette = "Set1", domain = df_lines$line_id)
-tract_palette <- colorFactor(palette = "Set1", domain = df_tracts$GEOID)
+tract_palette <- colorFactor(palette = "Set1", domain = df_tracts$line_id)
 
 leaflet() %>% 
   addTiles() %>% 
@@ -97,9 +96,10 @@ leaflet() %>%
               weight = 2,
               group = "Census tracts") %>% 
   addPolygons(data = df_tracts,
-              fillColor = ~tract_palette(GEOID),
-              fillOpacity = .3,
-              color = ~tract_palette(GEOID)) %>% 
+              #fillColor = ~tract_palette(line_id),
+              fillOpacity = .3#,
+              #color = ~tract_palette(line_id)
+              ) %>% 
   addPolylines(data = df_lines,
                color = ~transit_lines_palette(line_id))
 ```
