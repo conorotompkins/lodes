@@ -1,0 +1,21 @@
+---
+title: "flowmap_rmd"
+author: "Conor Tompkins"
+date: "9/1/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+flowmap is here
+```{r}
+knitr::include_url("https://flowmap.blue/1yCfr4t1lT1IhkJC3q228pyX3vW-Tghj1jzFZRBC66-Y?v=37.502320,-80.108000,5.64,0,0&a=0&as=1&b=1&bo=75&c=1&ca=1&d=1&fe=1&lt=1&lfm=ALL&col=interpolateViridis&f=50",
+                   height = "800px")
+```
+
+# references
+* https://liuyanguu.github.io/post/2019/02/24/shiny-in-blogdown/
+* https://doodles.mountainmath.ca/blog/2020/01/06/flow-maps/
+* https://flowmap.blue/
+* https://github.com/jamgreen/lehdr
