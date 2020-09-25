@@ -15,7 +15,7 @@ options(tigris_use_cache = TRUE,
         digits = 4)
 
 #get lodes
-states <- c("pa", "oh", "wv", "va", "dc", "de",
+states <- c("pa", "wv", "va", "dc", "de",
             "md", "ny", "ri", "ct", "ma", "vt", "nh", "me")
 
 lodes_od_main <- grab_lodes(state = states, year = 2017, 
@@ -44,7 +44,7 @@ lodes_combined %>%
 
 #get geometry
 counties_combined <- tigris::counties(state = c("PA", "NY", "NJ", "MD", 
-                                                "OH", "WV", "DE", "VA", 
+                                                "WV", "DE", "VA", 
                                                 "DC", "MA", "CT", "VT", 
                                                 "RI", "NH", "ME"), 
                                       cb = TRUE) %>% 
@@ -109,7 +109,11 @@ nodes <- network_graph %>%
 
 edges <- network_graph %>% 
   activate(edges) %>% 
-  as_tibble()
+  as_tibble() %>% 
+  rename(origin = from,
+         dest = to,
+         count = commuters) %>% 
+  arrange(desc(count))
 
 #check that nodes match up
 all(node_pos$GEOID == nodes$name)
