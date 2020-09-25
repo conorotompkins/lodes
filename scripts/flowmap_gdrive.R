@@ -45,7 +45,7 @@ edges <- read_csv("data/edges.csv")
 
 ##
 my_properties <- c(
-  "title"="BosWash regional US commuter flow",
+  "title"="Northeast Megalopolis commuter flow",
   "description"="Miniumum 500 commuters per origin-destination pair",
   "source.name"="2017 US Census LODES",
   "source.url"="https://lehd.ces.census.gov/data/",
@@ -71,11 +71,10 @@ ss <- gs4_create("lodes_flowmapblue", sheets = list(properties = properties,
                                                     locations = node_pos,
                                                     flows = edges))
 
-gdrive_sheet <- googledrive::drive_find("lodes_flowmapblue") %>% 
+googledrive::drive_find("lodes_flowmapblue") %>% 
   #filter(name == "lodes_flowmapblue") %>% 
-  pull(id)
-
-gs4_get(gdrive_sheet)
+  pull(id) %>% 
+  gs4_get()
 
 # write_sheet(properties, gdrive_sheet, "properties")
 # write_sheet(node_pos, gdrive_sheet, "locations")
