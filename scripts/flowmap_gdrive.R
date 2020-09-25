@@ -18,11 +18,7 @@ nodes <- read_csv("data/nodes.csv")
 
 node_pos <- read_csv("data/node_pos.csv")
 
-edges <- read_csv("data/edges.csv") %>% 
-  rename(origin = from,
-         dest = to,
-         count = commuters) %>% 
-  arrange(desc(count))
+edges <- read_csv("data/edges.csv")
 
 
 ##
@@ -49,7 +45,7 @@ edges <- read_csv("data/edges.csv") %>%
 
 ##
 my_properties <- c(
-  "title"="Animated regional US commuter flow",
+  "title"="BosWash regional US commuter flow",
   "description"="Miniumum 500 commuters per origin-destination pair",
   "source.name"="2017 US Census LODES",
   "source.url"="https://lehd.ces.census.gov/data/",
@@ -67,7 +63,7 @@ my_properties <- c(
 properties <- tibble(property=names(my_properties)) %>%
   mutate(value=my_properties[property])
 
-gs4_auth()
+#gs4_auth()
 
 drive_trash("lodes_flowmapblue")
 
