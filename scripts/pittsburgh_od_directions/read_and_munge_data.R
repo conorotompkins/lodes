@@ -58,7 +58,7 @@ combined_tract_sf_small <- combined_tract_sf %>%
   mutate(id = row_number(),
          pct_commuters = commuters / sum(commuters),
          cumulative_pct_commuters = cumsum(pct_commuters)) %>% 
-  filter(cumulative_pct_commuters <= .1) %>% 
+  filter(cumulative_pct_commuters <= .2) %>% 
   select(h_tract, w_tract, commuters)
 
 combined_tract_sf_small <- combined_tract_sf_small %>% 
@@ -83,11 +83,13 @@ tract_od_directions <- tract_od_directions %>%
          work_address = case_when(w_tract == "42003409000" ~ wexford_good_address,
                                   w_tract != "42003409000" ~ work_address))
 
+mb_directions_possibly <- possibly(mb_directions, otherwise = NA)
+
 #geocode addresses, get directions
 tract_od_directions <- tract_od_directions %>% 
   mutate(home_address_location_geocoded = map(home_address, mb_geocode),
          work_address_location_geocoded = map(work_address, mb_geocode)) %>% 
-  mutate(directions = map2(home_address, work_address, ~ mb_directions(origin = .x,
+  mutate(directions = map2(home_address, work_address, ~ mb_directions_possibly(origin = .x,
                                                                        destination = .y,
                                                                        steps = TRUE,
                                                                        profile = "driving"))) %>% 
@@ -95,20 +97,42 @@ tract_od_directions <- tract_od_directions %>%
          w_tract, w_tract_geo, work_address, work_address_location_geocoded,
          directions, commuters)
 
+glimpse(tract_od_directions)
+
+tract_od_directions %>% 
+  filter(is.na(directions)) %>% 
+  select(h_tract, w_tract, commuters) %>% 
+  summarize(commuters = sum(commuters))
+
+tract_od_directions %>% 
+  filter(is.na(directions)) %>% 
+  select(h_tract, w_tract) %>% 
+  write_csv("data/bad_directions.csv")
+
+
 #save as shp file
-tract_od_directions_shp <- tract_od_directions %>% 
+tract_od_directions_shp <- tract_od_directions %>%
   select(h_tract, home_address, w_tract, work_address, directions, commuters) %>% 
   unnest(directions)
+
+glimpse(tract_od_directions_shp)
+
+list.files("data/tract_od_total_shape", full.names = TRUE)
+
+list.files("data/tract_od_total_shape", full.names = TRUE) %>% 
+  set_names() %>% 
+  map(file.remove)
 
 st_write(tract_od_directions_shp, "data/tract_od_total_shape/tract_od_total_shape.shp")
 
 #calculate and save od_stats
-tract_od_stats <- tract_od_directions_test %>%
+tract_od_stats <- tract_od_directions %>%
   # mutate(directions = map(directions, as_tibble)) %>%
-  # unnest(directions) %>%
+  unnest(directions) %>%
   group_by(h_tract, home_address, w_tract, work_address) %>%
   summarize(duration = sum(duration),
-            distance = sum(distance))
+            distance = sum(distance),
+            commuters = min(commuters))
 
 tract_od_stats %>%
   write_csv("data/tract_od_stats.csv")
