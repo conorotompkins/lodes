@@ -11,21 +11,7 @@ options(tigris_use_cache = TRUE,
         scipen = 999,
         digits = 4)
 
-
-
-my_route <- mb_directions(
-  origin = "10 Avenue de Wagram, 75008 Paris France",
-  destination = "59 Rue de Tocqueville, 75017 Paris France",
-  profile = "cycling",
-  steps = TRUE,
-  language = "en"
-)
-
-leaflet(my_route) %>%
-  addMapboxTiles(style_id = "light-v9",
-                 username = "mapbox") %>%
-  addPolylines()
-
+#get tracts
 allegheny_county_tracts <- tracts(state = "PA", county = "Allegheny", cb = TRUE) %>% 
   select(GEOID)
 
@@ -46,52 +32,6 @@ lodes_od_ac_main <- grab_lodes(state = "pa", year = 2017,
 
 lodes_od_ac_main %>% 
   arrange(desc(commuters))
-
-lodes_od_ac_main %>% 
-  ggplot(aes(commuters)) +
-  geom_histogram() +
-  scale_x_log10()
-
-top_od <- lodes_od_ac_main %>% 
-  arrange(desc(commuters)) %>% 
-  #slice(1:20) %>% 
-  select(-c(state, year, commuters))
-
-w_tract_sf <- top_od %>% 
-  select(w_tract) %>% 
-  left_join(allegheny_county_tracts, by = c("w_tract" = "GEOID")) %>% 
-  st_as_sf() %>% 
-  st_centroid() %>% 
-  rename(w_tract_geo = geometry)
-
-w_tract_sf %>% 
-  ggplot() +
-  geom_sf(data = allegheny_county_tracts) +
-  geom_sf()
-  
-h_tract_sf <- top_od %>% 
-  select(h_tract) %>% 
-  left_join(allegheny_county_tracts, by = c("h_tract" = "GEOID")) %>% 
-  st_as_sf() %>% 
-  st_centroid() %>% 
-  rename(h_tract_geo = geometry)
-
-h_tract_sf %>% 
-  st_coordinates() %>% 
-  as_tibble() %>% 
-  ggplot(aes(X, Y)) +
-  geom_sf(data = allegheny_county_tracts, inherit.aes = FALSE) +
-  geom_point()
-
-h_tract_sf %>% 
-  ggplot() +
-  geom_sf(data = allegheny_county_tracts) +
-  geom_sf()
-
-h_tract_sf %>% 
-  slice(1) %>% 
-  pull(h_tract_geo) %>%
-  unlist()
 
 # test_market_square <- h_tract_sf %>% 
 #   mutate(home_address = map_chr(h_tract_geo, mb_reverse_geocode),
@@ -120,47 +60,101 @@ h_tract_sf %>%
 #   coord_equal()
   
   
-
+#munge od data
 combined_tract_sf <- lodes_od_ac_main %>%
   arrange(desc(commuters)) %>% 
   filter(w_tract != h_tract) %>% 
   mutate(commuter_percentile = percent_rank(commuters))
 
 combined_tract_sf %>% 
-  ggplot(aes(commuters)) +
-  stat_ecdf(geom = "step") +
-  coord_cartesian(xlim = c(0, 50))
+  select(commuters) %>% 
+  arrange(desc(commuters)) %>% 
+  mutate(id = row_number(),
+         pct_commuters = commuters / sum(commuters),
+         cumulative_pct_commuters = cumsum(pct_commuters)) %>% 
+  ggplot(aes(id, cumulative_pct_commuters)) +
+  geom_step()
 
-combined_tract_sf <- combined_tract_sf %>% 
-  slice(1:500) %>% 
+combined_tract_sf %>% 
+  ggplot(aes(commuters)) +
+  geom_histogram()
+
+combined_tract_sf_small <- combined_tract_sf %>% 
+  select(h_tract, w_tract, commuters) %>% 
+  arrange(desc(commuters)) %>% 
+  mutate(id = row_number(),
+         pct_commuters = commuters / sum(commuters),
+         cumulative_pct_commuters = cumsum(pct_commuters)) %>% 
+  filter(cumulative_pct_commuters <= .1) %>% 
+  select(h_tract, w_tract, commuters)
+
+combined_tract_sf_small <- combined_tract_sf_small %>% 
   left_join(st_centroid(allegheny_county_tracts), by = c("h_tract" = "GEOID")) %>% 
   rename(h_tract_geo = geometry) %>% 
   left_join(st_centroid(allegheny_county_tracts), by = c("w_tract" = "GEOID")) %>% 
   rename(w_tract_geo = geometry) %>% 
   select(h_tract, h_tract_geo, w_tract, w_tract_geo, commuters)
 
-#need to try to get mb_directions to work with coordinate pairs
-# tract_od_directions <- combined_tract_sf %>% 
-#   mutate(home_address = map_chr(h_tract_geo, mb_reverse_geocode),
-#          work_address = map_chr(w_tract_geo, mb_reverse_geocode)) %>% 
-#   mutate(directions = map2(home_address, work_address, ~ mb_directions(origin = .x,
-#                                                                        destination = .y,
-#                                                                        steps = TRUE,
-#                                                                        profile = "driving")))
+#get addresses for tract centroids
+###need to try to get mb_directions to work with coordinate pairs
+tract_od_directions <- combined_tract_sf_small %>%
+  mutate(home_address = map_chr(h_tract_geo, mb_reverse_geocode),
+         work_address = map_chr(w_tract_geo, mb_reverse_geocode))
 
+#replace bad address with good address
+wexford_good_address <- "3321 Wexford Rd, Gibsonia, PA 15044"
 
-# tract_od_stats <- tract_od_directions %>% 
-#   mutate(directions = map(directions, as_tibble)) %>% 
-#   unnest(directions) %>% 
-#   group_by(h_tract, home_address, w_tract, work_address) %>% 
-#   summarize(duration = sum(duration),
-#             distance = sum(distance))
+tract_od_directions <- tract_od_directions %>% 
+  mutate(home_address = case_when(h_tract == "42003409000" ~ wexford_good_address,
+                                  h_tract != "42003409000" ~ home_address),
+         work_address = case_when(w_tract == "42003409000" ~ wexford_good_address,
+                                  w_tract != "42003409000" ~ work_address))
 
-# tract_od_stats %>% 
-#   write_csv("data/tract_od_stats.csv")
+#geocode addresses, get directions
+tract_od_directions <- tract_od_directions %>% 
+  mutate(home_address_location_geocoded = map(home_address, mb_geocode),
+         work_address_location_geocoded = map(work_address, mb_geocode)) %>% 
+  mutate(directions = map2(home_address, work_address, ~ mb_directions(origin = .x,
+                                                                       destination = .y,
+                                                                       steps = TRUE,
+                                                                       profile = "driving"))) %>% 
+  select(h_tract, h_tract_geo, home_address, home_address_location_geocoded,
+         w_tract, w_tract_geo, work_address, work_address_location_geocoded,
+         directions, commuters)
 
+#save as shp file
+tract_od_directions_shp <- tract_od_directions %>% 
+  select(h_tract, home_address, w_tract, work_address, directions, commuters) %>% 
+  unnest(directions)
+
+st_write(tract_od_directions_shp, "data/tract_od_total_shape/tract_od_total_shape.shp")
+
+#read in shp file
+tract_od_directions_test <- st_read("data/tract_od_total_shape/tract_od_total_shape.shp") %>% 
+  rename(home_address = hm_ddrs,
+         work_address = wrk_ddr,
+         distance = distanc,
+         duration = duratin,
+         instruction = instrct,
+         commuters = commtrs)
+
+glimpse(tract_od_directions_test)
+
+#calculate and save od_stats
+tract_od_stats <- tract_od_directions_test %>%
+  # mutate(directions = map(directions, as_tibble)) %>%
+  # unnest(directions) %>%
+  group_by(h_tract, home_address, w_tract, work_address) %>%
+  summarize(duration = sum(duration),
+            distance = sum(distance))
+
+tract_od_stats %>%
+  write_csv("data/tract_od_stats.csv")
+
+#read in od stats
 tract_od_stats <- read_csv("data/tract_od_stats.csv")
 
+#graph od stats
 tract_od_stats %>% 
   ggplot(aes(distance, duration)) +
   geom_abline(linetype = 2) +
@@ -168,41 +162,19 @@ tract_od_stats %>%
   coord_equal()
 
 tract_od_directions %>% 
-  mutate(directions = map(directions, as_tibble)) %>% 
-  unnest(directions) %>% 
-  select(instruction) %>% 
-  View()
-
-tract_od_directions %>% 
-  select(w_tract_geo) %>% 
-  st_as_sf() %>% 
-  ggplot() +
-  geom_sf(data = allegheny_county_tracts) +
-  geom_sf()
-
-tract_od_directions %>% 
-  count(h_tract, w_tract, sort = TRUE)
-
-tract_od_directions %>% 
-  mutate(id = row_number()) %>% 
-  slice(1) %>% 
-  select(h_tract_geo) %>% 
-  st_as_sf() %>% 
-  ggplot() +
-  geom_sf(data = allegheny_county_tracts) +
-  geom_sf()
+  count(h_tract, w_tract, sort = TRUE) %>% 
+  filter(n > 1)
   
-
-tract_od_directions %>% 
-  mutate(id = row_number()) %>% 
-  slice(1:5) %>% 
-  select(id, h_tract, w_tract, directions) %>% 
-  unnest(directions) %>% 
-  st_as_sf() %>% 
-  group_by(id, h_tract, w_tract) %>% 
+#map routes
+tract_od_directions_test %>%
+  select(h_tract, w_tract, commuters, geometry) %>% 
+  group_by(h_tract, w_tract, commuters) %>% 
   summarize() %>% 
   ungroup() %>% 
   ggplot() +
-  geom_sf(data = allegheny_county_tracts) +
-  geom_sf(aes(color = as.factor(id))) +
-  facet_wrap(~id)
+  geom_sf(data = allegheny_county_tracts, size = .1, fill = NA) +
+  geom_sf(aes(alpha = commuters, size = commuters)) +
+  guides(color = FALSE) +
+  scale_size_continuous(range = c(.3, 2.5)) +
+  scale_alpha_continuous(range = c(.01, .7)) +
+  theme_void()
