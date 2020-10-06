@@ -27,6 +27,9 @@ tract_od_directions <- st_read("data/tract_od_total_shape/tract_od_total_shape.s
 
 glimpse(tract_od_directions)
 
+tract_od_directions %>% 
+ filter(is.na(geometry))
+
 #read in od stats
 tract_od_stats <- read_csv("data/tract_od_stats.csv")
 
@@ -36,6 +39,12 @@ tract_od_stats %>%
   geom_abline(linetype = 2) +
   geom_point(alpha = .5) +
   coord_equal() +
+  theme_ipsum()
+
+tract_od_stats %>% 
+  uncount(weights = commuters) %>% 
+  ggplot(aes(duration)) +
+  geom_density(fill = "grey") +
   theme_ipsum()
 
 tract_od_directions %>% 
@@ -63,16 +72,16 @@ tract_od_summarized <- tract_od_directions %>%
   as_tibble() %>% 
   arrange(desc(commuters)) %>% 
   group_by(h_tract, w_tract) %>% 
-  summarize(commuters = min(commuters),
-            duration = sum(duration),
-            distance = sum(distance)) %>% 
+  summarize(commuters = min(commuters, na.rm = TRUE),
+            duration = sum(duration, na.rm = TRUE),
+            distance = sum(distance, na.rm = TRUE)) %>% 
   arrange(desc(commuters))
 
 tract_od_summarized %>% 
   select(h_tract, duration) %>% 
   arrange(h_tract) %>% 
   group_by(h_tract) %>% 
-  summarize(mean_duration = mean(duration)) %>% 
+  summarize(mean_duration = mean(duration, na.rm = TRUE)) %>% 
   full_join(allegheny_county_tracts, by = c("h_tract" = "GEOID")) %>% 
   st_as_sf() %>% 
   ggplot() +
@@ -84,7 +93,7 @@ tract_od_summarized %>%
   select(w_tract, duration) %>% 
   arrange(w_tract) %>% 
   group_by(w_tract) %>% 
-  summarize(mean_duration = mean(duration)) %>% 
+  summarize(mean_duration = mean(duration, na.rm = TRUE)) %>% 
   full_join(allegheny_county_tracts, by = c("w_tract" = "GEOID")) %>% 
   st_as_sf() %>% 
   ggplot() +
