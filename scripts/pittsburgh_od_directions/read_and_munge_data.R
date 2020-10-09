@@ -125,14 +125,15 @@ list.files("data/tract_od_total_shape", full.names = TRUE) %>%
 
 st_write(tract_od_directions_shp, "data/tract_od_total_shape/tract_od_total_shape.shp")
 
-#calculate and save od_stats
-tract_od_stats <- tract_od_directions %>%
-  # mutate(directions = map(directions, as_tibble)) %>%
-  unnest(directions) %>%
-  group_by(h_tract, home_address, w_tract, work_address) %>%
-  summarize(duration = sum(duration),
-            distance = sum(distance),
-            commuters = min(commuters))
 
-tract_od_stats %>%
-  write_csv("data/tract_od_stats.csv")
+#other possible geocoder and routefinder APIs
+#hereR
+##https://munterfinger.github.io/hereR/
+##https://github.com/munterfinger/hereR/
+
+#OSRM
+##http://project-osrm.org/
+##https://github.com/rCarto/osrm
+
+#valhalla
+##https://valhalla.readthedocs.io/en/latest/api/
