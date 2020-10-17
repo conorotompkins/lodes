@@ -16,6 +16,14 @@ theme_set(theme_ipsum())
 allegheny_county_tracts <- tracts(state = "PA", county = "Allegheny", cb = TRUE) %>% 
   select(GEOID)
 
+st_erase <- function(x, y) {
+  st_difference(x, st_union(y))
+}
+
+ac_water <- area_water("PA", "Allegheny", class = "sf")
+
+allegheny_county_tracts <- st_erase(allegheny_county_tracts, ac_water)
+
 tract_od_stats <- read_csv("data/tract_od_stats.csv",
                            col_types = cols(
                              h_tract = col_character(),
@@ -61,7 +69,7 @@ tract_od_stats %>%
   st_as_sf() %>% 
   ggplot() +
   geom_sf(aes(fill = duration), size = .1) +
-  scale_fill_viridis_c() +
+  scale_fill_viridis_c(na.value = "grey90") +
   theme_void()
 
 tract_od_stats %>% 
@@ -117,7 +125,7 @@ var_imp <- lm_workflow %>%
 var_imp %>%
   mutate(Variable = fct_reorder(Variable, Importance)) %>% 
   ggplot(aes(Importance, Variable)) +
-  geom_point()
+  geom_col(fill = "grey", color = "black")
 
 tract_od_fit <- lm_workflow %>% 
   fit(tract_od_stats) %>% 
@@ -129,15 +137,27 @@ tract_od_fit %>%
   ggplot(aes(duration, .pred)) +
   geom_point(alpha = .3) +
   geom_abline(lty = 2, color = "red") +
-  coord_equal()
+  coord_equal() +
+  labs(x = "Duration",
+       y = "Predicted duration")
 
 tract_od_fit %>% 
-  mutate(.resid = .pred - duration) %>% 
+  mutate(.resid = duration - .pred) %>% 
   ggplot(aes(duration, .resid)) +
   geom_point(alpha = .3)
 
 tract_od_fit %>% 
-  mutate(.resid = .pred - duration) %>% 
+  mutate(.resid = duration - .pred) %>% 
+  select(contains("tract"), .resid) %>% 
+  pivot_longer(cols = contains("tract")) %>% 
+  group_by(name, value) %>% 
+  summarize(avg_resid = mean(.resid)) %>% 
+  ggplot(aes(avg_resid, fill = name, color = name)) +
+  geom_density(alpha = .6) +
+  labs(title = "Origin tract deviates from predicted commute duration")
+
+tract_od_fit %>% 
+  mutate(.resid = duration - .pred) %>% 
   group_by(h_tract) %>% 
   summarize(avg_resid = mean(.resid)) %>% 
   ungroup() %>% 
@@ -147,10 +167,12 @@ tract_od_fit %>%
   ggplot() +
   geom_sf(aes(fill = avg_resid), size = .1) +
   scale_fill_viridis_c(na.value = "grey90") +
-  labs(title = "Origin")
+  labs(title = "Commute duration above exected: Origin",
+       fill = "Minutes") +
+  theme_void()
 
 tract_od_fit %>% 
-  mutate(.resid = .pred - duration) %>% 
+  mutate(.resid = duration - .pred) %>% 
   group_by(w_tract) %>% 
   summarize(avg_resid = mean(.resid)) %>% 
   ungroup() %>% 
@@ -160,13 +182,15 @@ tract_od_fit %>%
   ggplot() +
   geom_sf(aes(fill = avg_resid), size = .1) +
   scale_fill_viridis_c(na.value = "grey90") +
-  labs(title = "Destination")
+  labs(title = "Commute duration above exected: Desitination",
+       fill = "Minutes") +
+  theme_void()
 
 
 allegheny_county_tracts %>% 
   st_drop_geometry() %>% 
   left_join(tract_od_fit %>% 
-              mutate(.resid = .pred - duration) %>% 
+              mutate(.resid = duration - .pred) %>% 
               select(h_tract, w_tract, .resid) %>% 
               pivot_longer(contains("tract")) %>% 
               group_by(name, value) %>% 
@@ -175,169 +199,15 @@ allegheny_county_tracts %>%
             by = c("GEOID" = "value")) %>% 
   complete(GEOID, name) %>% 
   filter(!is.na(name)) %>% 
-  left_join(allegheny_county_tracts) %>% 
+  left_join(allegheny_county_tracts) %>%
+  mutate(name = case_when(name == "h_tract" ~ "Origin tract",
+                          name == "w_tract" ~ "Destination tract"),
+         name = as.factor(name) %>% fct_rev()) %>% 
   st_sf() %>% 
   ggplot() +
-  geom_sf(aes(fill = avg_resid), size = NA) +
-  facet_wrap(~name) +
-  scale_fill_viridis_c(na.value = "grey90")
-
-
-tract_od_fit %>% 
-  mutate(.resid = .pred - duration) %>% 
-  select(contains("tract"), .resid) %>% 
-  pivot_longer(cols = contains("tract")) %>% 
-  group_by(name, value) %>% 
-  summarize(avg_resid = mean(.resid)) %>% 
-  ggplot(aes(avg_resid, fill = name, color = name)) +
-  geom_density(alpha = .6)
-
-
-#make model
-model_df <- tract_od_stats %>% 
-  select(-commuters) %>% 
-  nest(od_data = everything()) %>% 
-  mutate(model = map(od_data, ~lm(duration ~ distance + steps + h_tract + w_tract - 1, data = .)),
-         fit = map(model, augment),
-         coeff = map(model, tidy),
-         glance = map(model, glance),
-         summary = map(model, summary))
-
-#summary
-model_df %>% 
-  select(summary) %>% 
-  pull(summary)
-
-#coeff
-model_df %>% 
-  select(coeff) %>% 
-  unnest(coeff) %>%
-  mutate(term = fct_reorder(term, estimate)) %>% 
-  arrange(desc(term)) %>% 
-  View()
-
-model_df %>% 
-  select(coeff) %>% 
-  unnest(coeff) %>% 
-  filter(str_detect(term, "42003020100"))
-
-model_df %>% 
-  select(coeff) %>% 
-  unnest(coeff) %>% 
-  filter(str_detect(term, "h_tract"))
-
-tract_od_stats %>% 
-  drop_na(duration) %>% 
-  distinct(h_tract)
-
-#check for tracts that are in model_df but not in tract_od_stats or allegheny_county_tracts
-model_df %>% 
-  select(coeff) %>% 
-  unnest(coeff) %>% 
-  filter(str_detect(term, "h_tract")) %>% 
-  mutate(term = str_remove(term, "^h_tract")) %>% 
-  anti_join(tract_od_stats, by = c("term" = "h_tract"))
-
-model_df %>% 
-  select(coeff) %>% 
-  unnest(coeff) %>% 
-  filter(str_detect(term, "h_tract")) %>% 
-  mutate(term = str_remove(term, "^h_tract")) %>% 
-  anti_join(allegheny_county_tracts, by = c("term" = "GEOID"))
-
-model_df %>% 
-  select(coeff) %>% 
-  unnest(coeff) %>% 
-  filter(str_detect(term, "w_tract")) %>% 
-  mutate(term = str_remove(term, "^w_tract")) %>% 
-  anti_join(tract_od_stats, by = c("term" = "w_tract"))
-
-model_df %>% 
-  select(coeff) %>% 
-  unnest(coeff) %>% 
-  filter(str_detect(term, "w_tract")) %>% 
-  mutate(term = str_remove(term, "^w_tract")) %>% 
-  anti_join(allegheny_county_tracts, by = c("term" = "GEOID"))
-
-
-
-term_df <- model_df %>% 
-  select(coeff) %>% 
-  unnest(coeff) %>%
-  mutate(term_type = case_when(str_detect(term, "h_tract") ~ "h_tract",
-                               str_detect(term, "w_tract") ~ "w_tract",
-                               TRUE ~ "other")) %>% 
-  mutate(term_fct = tidytext::reorder_within(term, estimate, term_type))
-
-term_df %>% 
-  filter(term_type == "h_tract" | term_type == "w_tract") %>% 
-  ggplot(aes(estimate, fill = term_type, color = term_type)) +
-  geom_density(alpha = .5)
-
-model_df %>% 
-  select(coeff) %>% 
-  unnest(coeff) %>% 
-  ggplot(aes(estimate, p.value)) +
-  geom_point(alpha = .3)
-
-model_df %>% 
-  select(coeff) %>% 
-  unnest(coeff) %>%
-  filter(str_detect(term, "h_tract")) %>% 
-  mutate(term = str_remove(term, "^h_tract")) %>% 
-  select(term, estimate) %>% 
-  full_join(allegheny_county_tracts, by = c("term" = "GEOID")) %>% 
-  st_sf() %>% 
-  ggplot() +
-  geom_sf(aes(fill = estimate), size = .1) +
-  scale_fill_viridis_c() +
-  labs(title = "Origins")
-
-model_df %>% 
-  select(coeff) %>% 
-  unnest(coeff) %>%
-  filter(str_detect(term, "w_tract")) %>% 
-  mutate(term = str_remove(term, "^w_tract")) %>% 
-  #filter(str_detect(term, "42003020100"))
-  select(term, estimate) %>% 
-  full_join(allegheny_county_tracts, by = c("term" = "GEOID")) %>% 
-  st_sf() %>% 
-  ggplot() +
-  geom_sf(aes(fill = estimate), size = .1) +
-  scale_fill_viridis_c() +
-  labs(title = "Destinations")
-
-allegheny_county_tracts %>% 
-  st_drop_geometry() %>% 
-  left_join(term_df %>% 
-              select(term, term_type, estimate) %>% 
-              filter(term_type %in% c("h_tract", "w_tract")) %>% 
-              mutate(term = str_remove_all(term, "h_tract|w_tract")),
-            by = c("GEOID" = "term")) %>% 
-  complete(GEOID, term_type) %>% 
-  filter(!is.na(term_type)) %>% 
-  left_join(allegheny_county_tracts) %>% 
-  st_sf() %>% 
-  ggplot() +
-  #geom_sf(data = allegheny_county_tracts, size = 0) +
-  geom_sf(aes(fill = estimate), size = .1) +
-  scale_fill_viridis_c(na.value = "grey50") +
-  facet_wrap(~term_type) +
+  geom_sf(aes(fill = avg_resid), size = .1) +
+  facet_wrap(~name, ncol = 1) +
+  scale_fill_viridis_c(na.value = "grey90") +
+  labs(title = "Commute duration above/below prediction",
+       fill = "Minutes") +
   theme_void()
-
-#fit
-model_df %>% 
-  select(fit) %>% 
-  unnest(fit) %>%
-  ggplot(aes(duration, .fitted)) +
-  geom_abline(lty = 2) +
-  geom_jitter(alpha = .3) +
-  coord_equal()
-
-model_df %>% 
-  select(fit) %>% 
-  unnest(fit) %>% 
-  select(duration, .fitted) %>% 
-  pivot_longer(cols = everything(), names_to = "type", values_to = "value") %>% 
-  ggplot(aes(value, fill = type, color = type)) +
-  geom_density(alpha = .5)
