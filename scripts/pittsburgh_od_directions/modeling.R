@@ -13,6 +13,14 @@ set.seed(1234)
 
 theme_set(theme_ipsum())
 
+ac_water <- area_water("PA", "Allegheny", class = "sf")
+
+main_rivers <- ac_water %>% 
+  group_by(FULLNAME) %>% 
+  summarize(AWATER = sum(AWATER)) %>% 
+  arrange(desc(AWATER)) %>% 
+  slice(1:4)
+
 allegheny_county_tracts <- tracts(state = "PA", county = "Allegheny", cb = TRUE) %>% 
   select(GEOID)
 
@@ -24,26 +32,44 @@ ac_water <- area_water("PA", "Allegheny", class = "sf")
 
 allegheny_county_tracts <- st_erase(allegheny_county_tracts, ac_water)
 
-tract_od_stats <- read_csv("data/tract_od_stats.csv",
-                           col_types = cols(
-                             h_tract = col_character(),
-                             home_address = col_character(),
-                             w_tract = col_character(),
-                             work_address = col_character(),
-                             duration = col_double(),
-                             distance = col_double(),
-                             steps = col_double(),
-                             commuters = col_double()
-                           )) %>%
-  #uncount(commuters) %>% 
-  select(h_tract, w_tract, distance, steps, commuters, duration) %>% 
-  drop_na(duration) %>% 
-  arrange(desc(duration)) %>% 
-  #mutate(h_tract = fct_reorder(h_tract, commuters, .desc = FALSE),
-  #       w_tract = fct_reorder(w_tract, commuters, .desc = FALSE)) %>% 
-  mutate(od_id = str_c("h_tract: ", h_tract, ", ", "w_tract: ", w_tract, sep = ""))
-
 glimpse(tract_od_stats)
+
+tract_od_directions <- st_read("data/tract_od_total_shape_combined/tract_od_total_shape_combined.shp") %>% 
+  rename(home_address = hm_ddrs,
+         work_address = wrk_ddr,
+         distance = distanc,
+         duration = duratin,
+         directions = dirctns,
+         instructions = instrct,
+         commuters = commtrs,
+         source_file = sorc_fl) %>% 
+  st_transform(crs = "NAD83")
+
+tract_od_stats <- tract_od_directions %>% 
+  unnest(directions) %>%
+  mutate(od_id = str_c("h_tract: ", h_tract, ", ", "w_tract: ", w_tract, sep = "")) %>% 
+  group_by(h_tract, home_address, w_tract, work_address, od_id) %>%
+  summarize(duration = sum(duration),
+            distance = sum(distance),
+            steps = n(),
+            commuters = unique(commuters)) %>% 
+  ungroup()
+
+tract_od_stats <- tract_od_stats %>% 
+  mutate(intersects_ohio = st_intersects(., main_rivers %>% 
+                                           filter(FULLNAME == "Ohio Riv")) %>% as.logical(),
+         intersects_allegheny = st_intersects(., main_rivers %>% 
+                                                filter(FULLNAME == "Allegheny Riv")) %>% as.logical(),
+         intersects_monongahela = st_intersects(., main_rivers %>% 
+                                                  filter(FULLNAME == "Monongahela Riv")) %>% as.logical(),
+         intersects_youghiogheny = st_intersects(., main_rivers %>% 
+                                                   filter(FULLNAME == "Youghiogheny Riv")) %>% as.logical()) %>% 
+  replace_na(list(intersects_ohio = FALSE,
+                  intersects_allegheny = FALSE,
+                  intersects_monongahela = FALSE,
+                  intersects_youghiogheny = FALSE)) %>% 
+  st_drop_geometry()
+
 
 tract_od_stats %>% 
   count(w_tract, sort = TRUE)
@@ -55,7 +81,9 @@ tract_od_stats %>%
 tract_od_stats %>% 
   ggplot(aes(distance, duration)) +
   geom_jitter(alpha = .3) +
-  geom_smooth()
+  geom_smooth() +
+  geom_abline(lty = 2, color = "red") +
+  coord_equal()
 
 tract_od_stats %>% 
   ggplot(aes(steps, duration)) +
@@ -79,8 +107,8 @@ tract_od_stats %>%
 model_recipe <- recipe(duration ~ ., 
                        data = tract_od_stats) %>% 
   update_role(od_id, new_role = "id") %>%
-  step_rm(h_tract, w_tract, commuters) %>% 
-  step_normalize(all_predictors())
+  step_rm(h_tract, home_address, w_tract, work_address, commuters, intersects_youghiogheny) %>% 
+  step_normalize(distance, steps)
 
 model_recipe %>% 
   prep() %>% 
@@ -89,7 +117,7 @@ model_recipe %>%
 model_recipe_prep <- model_recipe %>% 
   prep()
 
-tract_vfold <- vfold_cv(tract_od_stats, times = 10)
+tract_vfold <- vfold_cv(tract_od_stats, v = 100)
 
 tract_vfold %>% 
   pull(splits) %>% 
@@ -115,18 +143,31 @@ lm_res %>%
 
 lm_res %>% 
   collect_metrics()
+
+lm_res %>% 
+  select(.metrics) %>% 
+  unnest(.metrics) %>% 
+  filter(.metric == "rsq")
+
+lm_res %>% 
+  select(.metrics) %>% 
+  unnest(.metrics) %>% 
+  arrange(.metric) %>% 
+  ggplot(aes(.estimate, fill = .metric)) +
+  geom_density() +
+  facet_wrap(~.metric, scales = "free", ncol = 1)
   
 #variable importance
-var_imp <- lm_workflow %>% 
+lm_workflow %>% 
   fit(tract_od_stats) %>% 
   pull_workflow_fit() %>% 
-  vip::vi()
-
-var_imp %>%
-  mutate(Variable = fct_reorder(Variable, Importance)) %>% 
-  ggplot(aes(Importance, Variable)) +
+  tidy() %>% 
+  filter(term != "(Intercept)") %>% 
+  mutate(term = fct_reorder(term, estimate)) %>% 
+  ggplot(aes(estimate, term)) +
   geom_col(fill = "grey", color = "black")
-
+  
+#final model
 tract_od_fit <- lm_workflow %>% 
   fit(tract_od_stats) %>% 
   predict(tract_od_stats) %>% 
@@ -154,7 +195,7 @@ tract_od_fit %>%
   summarize(avg_resid = mean(.resid)) %>% 
   ggplot(aes(avg_resid, fill = name, color = name)) +
   geom_density(alpha = .6) +
-  labs(title = "Origin tract deviates from predicted commute duration")
+  labs(title = "Destination tract mostly decreases duration")
 
 tract_od_fit %>% 
   mutate(.resid = duration - .pred) %>% 
