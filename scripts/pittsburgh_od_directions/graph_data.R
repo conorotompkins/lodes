@@ -18,11 +18,11 @@ lodes_od_ac_main <- grab_lodes(state = "pa", year = 2017,
                                agg_geo = "tract") %>%
   select(state, w_tract, h_tract, S000, year) %>% 
   rename(commuters = S000) %>% 
-  mutate(intra_tract_flag = h_tract == w_tract)
+  mutate(intra_tract_commute = h_tract == w_tract)
 
 #95% work outside of the tract they live in
 lodes_od_ac_main %>% 
-  group_by(intra_tract_flag) %>% 
+  group_by(intra_tract_commute) %>% 
   summarize(commuters = sum(commuters)) %>% 
   ungroup() %>% 
   mutate(pct_commuters = commuters / sum(commuters)) %>% 
@@ -75,7 +75,7 @@ tract_od_stats %>%
 
 #i focus on top 20% of od by commuters
 top_20 <- lodes_od_ac_main %>% 
-  filter(intra_tract_flag == FALSE) %>% 
+  filter(intra_tract_commute == FALSE) %>% 
   select(commuters) %>% 
   arrange(desc(commuters)) %>% 
   mutate(id = row_number(),
@@ -178,48 +178,6 @@ tract_od_stats %>%
        alpha = "Commuters",
        size = "Commuters")
 
-
-# tract_od_directions %>% 
-#   st_drop_geometry() %>% 
-#   group_by(h_tract, w_tract) %>% 
-#   mutate(id = row_number()) %>% 
-#   ungroup() %>% 
-#   as_tibble() %>% 
-#   select(id, h_tract, w_tract, instructions) %>% 
-#   count(id, h_tract, w_tract, instructions, sort = T)
-
-# tract_od_directions %>% 
-#   st_drop_geometry() %>% 
-#   group_by(h_tract, w_tract) %>% 
-#   mutate(id = row_number()) %>% 
-#   ungroup() %>% 
-#   as_tibble() %>% 
-#   select(id, h_tract, w_tract, instructions, duration, distance) %>% 
-#   count(id, h_tract, w_tract, instructions, duration, distance, sort = T) %>% 
-#   View()
-  
-# tract_od_directions %>% 
-#   st_drop_geometry() %>% 
-#   count(h_tract, w_tract, instructions, sort = T) %>% 
-#   filter(n > 1) %>% 
-#   View()
-
-# tract_od_directions %>% 
-#   filter(h_tract == "42003180700", w_tract == "42003020100") %>% 
-#   View()
-# 42003180700
-# 42003020100
-
-# tract_od_summarized <- tract_od_directions %>%
-#   st_drop_geometry() %>% 
-#   as_tibble() %>% 
-#   arrange(desc(commuters)) %>% 
-#   group_by(h_tract, w_tract) %>% 
-#   summarize(commuters = min(commuters, na.rm = TRUE),
-#             duration = sum(duration, na.rm = TRUE),
-#             distance = sum(distance, na.rm = TRUE)) %>% 
-#   arrange(desc(commuters))
-
 tract_od_stats %>% 
   st_drop_geometry() %>% 
   group_by(h_tract) %>% 
@@ -232,20 +190,6 @@ tract_od_stats %>%
   labs(title = "Average commute time from a tract",
        fill = "Avg. time") +
   theme_void()
-  
-
-# tract_od_summarized %>% 
-#   select(h_tract, duration) %>% 
-#   arrange(h_tract) %>% 
-#   group_by(h_tract) %>% 
-#   summarize(mean_duration = mean(duration, na.rm = TRUE)) %>% 
-#   full_join(allegheny_county_tracts, by = c("h_tract" = "GEOID")) %>% 
-#   st_as_sf() %>% 
-#   ggplot() +
-#   geom_sf(aes(fill = mean_duration), size = .1) +
-#   scale_fill_viridis_c(na.value = "grey90") +
-#   labs(title = "Origin") +
-#   theme_void()
 
 tract_od_stats %>% 
   st_drop_geometry() %>% 
@@ -258,9 +202,35 @@ tract_od_stats %>%
   ggplot() +
   geom_sf(aes(fill = mean_duration), size = .1) +
   scale_fill_viridis_c(na.value = "grey90") +
-  labs(title = "Average commute time from a tract",
+  labs(title = "Average commute time to a tract",
        fill = "Avg. time") +
   theme_void()
+
+allegheny_county_tracts %>% 
+  st_drop_geometry() %>% 
+  left_join(tract_od_stats %>% 
+              select(h_tract, w_tract, duration) %>% 
+              pivot_longer(contains("tract")) %>% 
+              group_by(name, value) %>% 
+              summarize(avg_duration = mean(duration)) %>% 
+              ungroup(),
+            by = c("GEOID" = "value")) %>% 
+  complete(GEOID, name) %>% 
+  filter(!is.na(name)) %>% 
+  left_join(allegheny_county_tracts) %>%
+  mutate(name = case_when(name == "h_tract" ~ "Origin tract",
+                          name == "w_tract" ~ "Destination tract"),
+         name = as.factor(name) %>% fct_rev()) %>% 
+  st_sf() %>% 
+  ggplot() +
+  geom_sf(aes(fill = avg_duration), size = .1) +
+  facet_wrap(~name, ncol = 1) +
+  scale_fill_viridis_c(na.value = "grey90") +
+  labs(title = "Average commute duration",
+       fill = "Minutes") +
+  theme_void()
+
+
 
 tract_od_stats %>% 
   select(h_tract, w_tract, duration) %>% 
