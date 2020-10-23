@@ -165,18 +165,40 @@ tract_od_directions %>%
   filter(n > 1)
 
 #map routes
-tract_od_stats %>% 
+commute_path_road_map <- tract_od_stats %>% 
   ggplot() +
   geom_sf(data = allegheny_county_tracts, size = .1, fill = "black") +
-  geom_sf(aes(alpha = commuters, size = commuters), color = "#ffcc01") +
+  geom_sf(aes(#alpha = commuters, 
+              size = commuters), 
+          color = "#ffcc01",
+          alpha = .025) +
   guides(color = FALSE) +
   scale_size_continuous(range = c(.3, 2.5)) +
-  scale_alpha_continuous(range = c(.01, .7)) +
+  #scale_alpha_continuous(range = c(.01, .7)) +
   theme_void() +
   labs(title = "Commuter routes between Allegheny County census tracts",
        subtitle = "Driving routes",
        alpha = "Commuters",
        size = "Commuters")
+
+commute_path_road_map
+
+commute_path_road_map_big <- commute_path_road_map +
+  scale_size_continuous(range = c(.3, 7)) +
+  guides(size = guide_legend(override.aes= list(alpha = 1))) +
+  #scale_alpha_continuous(range = c(.01, .2)) +
+  #guides(alpha = FALSE) +
+  theme_void(base_size = 30) +
+  theme(panel.background = element_rect(fill = "black"),
+        plot.background = element_rect(fill = "black"),
+        plot.margin = unit(c(0,0,0,0), "cm"),
+        legend.background = element_rect(fill = "black"),
+        legend.title = element_text(color = "white"),
+        legend.text = element_text(color = "white"),
+        plot.title = element_text(color = "white"))
+
+commute_path_road_map_big %>% 
+  ggsave(filename = "output/commute_path_road_map.png", width = 20, height = 20, dpi = 300)
 
 tract_od_stats %>% 
   st_drop_geometry() %>% 
