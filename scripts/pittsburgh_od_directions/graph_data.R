@@ -40,6 +40,12 @@ ac_water <- area_water("PA", "Allegheny", class = "sf")
 
 allegheny_county_tracts <- st_erase(allegheny_county_tracts, ac_water)
 
+main_rivers <- ac_water %>% 
+  group_by(FULLNAME) %>% 
+  summarize(AWATER = sum(AWATER)) %>% 
+  arrange(desc(AWATER)) %>% 
+  slice(1:4)
+
 #read in shp file
 st_read("data/tract_od_total_shape_combined/tract_od_total_shape_combined.shp") %>% 
   names()
@@ -168,6 +174,7 @@ tract_od_directions %>%
 commute_path_road_map <- tract_od_stats %>% 
   ggplot() +
   geom_sf(data = allegheny_county_tracts, size = .1, fill = "black") +
+  geom_sf(data = main_rivers, color = "white") +
   geom_sf(aes(#alpha = commuters, 
               size = commuters), 
           color = "#ffcc01",

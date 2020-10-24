@@ -30,6 +30,12 @@ ac_water <- area_water("PA", "Allegheny", class = "sf")
 
 allegheny_county_tracts <- st_erase(allegheny_county_tracts, ac_water)
 
+main_rivers <- ac_water %>% 
+  group_by(FULLNAME) %>% 
+  summarize(AWATER = sum(AWATER)) %>% 
+  arrange(desc(AWATER)) %>% 
+  slice(1:4)
+
 #load directions
 tract_od_directions <- st_read("data/tract_od_total_shape_combined/tract_od_total_shape_combined.shp") %>% 
   rename(home_address = hm_ddrs,
@@ -103,6 +109,7 @@ road_map <- tract_od_directions %>%
   arrange(h_tract, w_tract) %>% 
   ggplot() +
   geom_sf(data = allegheny_county_tracts, size = .1, fill = "black") +
+  geom_sf(data = main_rivers, color = "white") +
   geom_sf(aes(alpha = commuters, size = commuters), color = "#ffcc01") +
   scale_size_continuous(range = c(.3, 2.5)) +
   scale_alpha_continuous(range = c(.01, .7)) +
@@ -113,7 +120,9 @@ road_map <- tract_od_directions %>%
        alpha = "Commuters") +
   theme(plot.title = element_text(size = 22),
         legend.title = element_text(size = 20),
-        legend.text = element_text(size = 18))
+        legend.text = element_text(size = 18),
+        plot.background = element_rect(fill = "black"),
+        panel.background = element_rect(fill = "black"))
 
 anim_save(filename = "output/animated_main_roads.gif", animation = road_map,
           duration = 15,
@@ -130,6 +139,7 @@ animated_route_steps <- tract_od_directions %>%
   select(id, h_tract, w_tract, commuters, geometry) %>% 
   ggplot() +
   geom_sf(data = allegheny_county_tracts, size = .1, fill = "black") +
+  geom_sf(data = main_rivers, color = "white") +
   geom_sf(aes(alpha = commuters, size = commuters), 
           color = "#ffcc01", alpha = .025) +
   scale_size_continuous(range = c(.3, 7)) +
