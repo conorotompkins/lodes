@@ -144,6 +144,9 @@ animated_route_steps <- tract_od_directions %>%
           color = "#ffcc01", alpha = .025) +
   scale_size_continuous(range = c(.3, 7)) +
   guides(size = guide_legend(override.aes= list(alpha = 1))) +
+  labs(title = "Commuter routes between Allegheny County census tracts",
+       subtitle = "Origin to destination",
+       size = "Commuters") +
   theme_void(base_size = 30) +
   theme(panel.background = element_rect(fill = "black"),
         plot.background = element_rect(fill = "black"),
@@ -151,10 +154,8 @@ animated_route_steps <- tract_od_directions %>%
         legend.background = element_rect(fill = "black"),
         legend.title = element_text(color = "white"),
         legend.text = element_text(color = "white"),
-        plot.title = element_text(color = "white")) +
-  labs(title = "Commuter routes between Allegheny County census tracts",
-       subtitle = "Origin -> Destination",
-       size = "Commuters") +
+        plot.title = element_text(color = "white"),
+        plot.subtitle = element_text(color = "white")) +
   transition_manual(id, cumulative = TRUE)
 
 anim_save(filename = "output/animated_route_steps.gif", animation = animated_route_steps,
