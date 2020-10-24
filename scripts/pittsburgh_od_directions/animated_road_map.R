@@ -120,3 +120,33 @@ anim_save(filename = "output/animated_main_roads.gif", animation = road_map,
           width = 1000, height = 1000)
 
   
+
+
+animated_route_steps <- tract_od_directions %>% 
+  group_by(h_tract, w_tract) %>% 
+  mutate(id = row_number()) %>% 
+  # filter(h_tract == "42003409000",
+  #        w_tract == "42003020100") %>% 
+  select(id, h_tract, w_tract, commuters, geometry) %>% 
+  ggplot() +
+  geom_sf(data = allegheny_county_tracts, size = .1, fill = "black") +
+  geom_sf(aes(alpha = commuters, size = commuters), 
+          color = "#ffcc01", alpha = .025) +
+  scale_size_continuous(range = c(.3, 7)) +
+  guides(size = guide_legend(override.aes= list(alpha = 1))) +
+  theme_void(base_size = 30) +
+  theme(panel.background = element_rect(fill = "black"),
+        plot.background = element_rect(fill = "black"),
+        plot.margin = unit(c(0,0,0,0), "cm"),
+        legend.background = element_rect(fill = "black"),
+        legend.title = element_text(color = "white"),
+        legend.text = element_text(color = "white"),
+        plot.title = element_text(color = "white")) +
+  labs(title = "Commuter routes between Allegheny County census tracts",
+       subtitle = "Origin -> Destination",
+       size = "Commuters") +
+  transition_manual(id, cumulative = TRUE)
+
+anim_save(filename = "output/animated_route_steps.gif", animation = animated_route_steps,
+          duration = 10, fps = 50,
+          width = 1000, height = 1000)
