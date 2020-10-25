@@ -115,8 +115,9 @@ testing_data <- testing(splits)
 model_recipe <- recipe(duration ~ ., 
                        data = training_data) %>% 
   update_role(od_id, new_role = "id") %>%
-  step_rm(h_tract, home_address, w_tract, work_address, commuters, intersects_youghiogheny) %>% 
-  step_normalize(distance, steps)
+  step_rm(h_tract, home_address, w_tract, work_address, commuters) %>% 
+  step_normalize(distance, steps) %>% 
+  step_zv(all_predictors())
 
 model_recipe %>% 
   prep() %>% 
@@ -126,7 +127,7 @@ model_recipe_prep <- model_recipe %>%
   prep()
 
 #apply cv to training data
-training_vfold <- vfold_cv(training_data, v = 10)
+training_vfold <- vfold_cv(training_data, v = 10, repeats = 2)
 
 training_vfold %>% 
   pull(splits) %>% 
@@ -142,16 +143,26 @@ lm_workflow <- workflow() %>%
   add_recipe(model_recipe) %>% 
   add_model(lm_model)
 
+#fit against training resamples
+keep_pred <- control_resamples(save_pred = TRUE)
+
 lm_training_fit <- lm_workflow %>% 
-  fit_resamples(training_vfold) %>% 
+  fit_resamples(training_vfold, control = keep_pred) %>% 
   mutate(model = "lm")
 
 lm_training_fit %>% 
   unnest(.notes) %>% 
   pull(.notes)
 
+#get results from training cv
 lm_training_fit %>% 
   collect_metrics()
+
+lm_training_fit %>% 
+  collect_predictions() %>% 
+  ggplot(aes(duration, .pred)) +
+  geom_abline(linetype = 2, color = "red") +
+  geom_point(alpha = .3)
 
 lm_training_fit %>% 
   select(.metrics) %>% 
