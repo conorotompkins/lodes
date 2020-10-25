@@ -126,7 +126,7 @@ model_recipe_prep <- model_recipe %>%
   prep()
 
 #apply cv to training data
-training_vfold <- vfold_cv(training_data, v = 100)
+training_vfold <- vfold_cv(training_data, v = 10)
 
 training_vfold %>% 
   pull(splits) %>% 
@@ -142,23 +142,23 @@ lm_workflow <- workflow() %>%
   add_recipe(model_recipe) %>% 
   add_model(lm_model)
 
-lm_res <- lm_workflow %>% 
+lm_training_fit <- lm_workflow %>% 
   fit_resamples(training_vfold) %>% 
   mutate(model = "lm")
 
-lm_res %>% 
+lm_training_fit %>% 
   unnest(.notes) %>% 
   pull(.notes)
 
-lm_res %>% 
+lm_training_fit %>% 
   collect_metrics()
 
-lm_res %>% 
+lm_training_fit %>% 
   select(.metrics) %>% 
   unnest(.metrics) %>% 
   filter(.metric == "rsq")
 
-lm_res %>% 
+lm_training_fit %>% 
   select(.metrics) %>% 
   unnest(.metrics) %>% 
   arrange(.metric) %>% 
@@ -168,7 +168,7 @@ lm_res %>%
   
 #variable importance
 lm_workflow %>% 
-  fit(training_data) %>% 
+  fit(testing_data) %>% 
   pull_workflow_fit() %>% 
   tidy() %>% 
   filter(term != "(Intercept)") %>% 
@@ -191,12 +191,12 @@ tract_od_pred %>%
   labs(x = "Duration",
        y = "Predicted duration")
 
-tract_od_fit %>% 
+tract_od_pred %>% 
   mutate(.resid = duration - .pred) %>% 
   ggplot(aes(duration, .resid)) +
   geom_point(alpha = .3)
 
-tract_od_fit %>% 
+tract_od_pred %>% 
   mutate(.resid = duration - .pred) %>% 
   select(contains("tract"), .resid) %>% 
   pivot_longer(cols = contains("tract")) %>% 
@@ -205,7 +205,7 @@ tract_od_fit %>%
   ggplot(aes(avg_resid, fill = name, color = name)) +
   geom_density(alpha = .6)
 
-tract_od_fit %>% 
+tract_od_pred %>% 
   mutate(.resid = duration - .pred) %>% 
   group_by(h_tract) %>% 
   summarize(avg_resid = mean(.resid)) %>% 
@@ -220,7 +220,7 @@ tract_od_fit %>%
        fill = "Minutes") +
   theme_void()
 
-tract_od_fit %>% 
+tract_od_pred %>% 
   mutate(.resid = duration - .pred) %>% 
   group_by(w_tract) %>% 
   summarize(avg_resid = mean(.resid)) %>% 
@@ -238,7 +238,7 @@ tract_od_fit %>%
 
 allegheny_county_tracts %>% 
   st_drop_geometry() %>% 
-  left_join(tract_od_fit %>% 
+  left_join(tract_od_pred %>% 
               mutate(.resid = duration - .pred) %>% 
               select(h_tract, w_tract, .resid) %>% 
               pivot_longer(contains("tract")) %>% 
